@@ -1,0 +1,119 @@
+version: '3.8'
+
+x-app-common: &app-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment:
+    - DATABASE_URL=postgresql://votiix:votiix_password@postgres:5432/ballot_db?schema=public
+    - REDIS_URL=redis://redis:6379
+    - KAFKA_BROKER=kafka:29092
+    - JWT_SECRET=change_me_in_coolify_env
+    - RSA_PRIVATE_KEY=change_me_in_coolify_env
+    - RSA_PUBLIC_KEY=change_me_in_coolify_env
+  depends_on:
+    - postgres
+    - redis
+    - kafka
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: votiix
+      POSTGRES_PASSWORD: votiix_password
+      POSTGRES_DB: ballot_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  # Votiix Microservices - Deployed alongside DBs in Coolify
+  votiix-identity:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-identity
+    ports:
+      - "3001:3001"
+      
+  votiix-token:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-token
+    ports:
+      - "3002:3002"
+
+  votiix-vote-engine:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-vote-engine
+    ports:
+      - "3003:3003"
+
+  votiix-core:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-core
+    ports:
+      - "3004:3004"
+
+  votiix-iot:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-iot
+    ports:
+      - "3005:3005"
+
+  votiix-observer:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-observer
+
+  votiix-messenger:
+    <<: *app-common
+    build:
+      context: .
+      args:
+        APP_NAME: votiix-messenger
+
+volumes:
+  postgres_data:
+  redis_data:
