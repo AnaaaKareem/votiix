@@ -1,0 +1,68 @@
+name: MOSIP Tests
+
+on:
+  push:
+    paths:
+      - 'backend/esignet-mock/**'
+      - 'backend/tests/**'
+    branches: [ backend ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build and run with Docker Compose
+        working-directory: ./backend/esignet-mock
+        run: |
+          if docker compose -f docker-compose.yml up --build -d > /dev/null 2>&1; then
+            echo "Success: Docker containers started successfully."
+          else
+            echo "Error: Failed to start Docker containers."
+            exit 1
+          fi
+
+      - name: Wait for esignet-mock services to be healthy
+        run: |
+          echo "Waiting for eSignet Backend (localhost:8088)..."
+          timeout 120 bash -c 'until curl -s http://localhost:8088/v1/esignet/swagger-ui.html > /dev/null; do sleep 5; done'
+          
+          echo "Waiting for eSignet UI (localhost:3000)..."
+          timeout 120 bash -c 'until curl -s http://localhost:3000 > /dev/null; do sleep 5; done'
+          
+          echo "Waiting for Mock Identity System (localhost:8082)..."
+          timeout 120 bash -c 'until curl -s http://localhost:8082/v1/mockidentitysystem/swagger-ui.html > /dev/null; do sleep 5; done'
+          
+          echo "All services are up!"
+
+      - name: Dump Docker Logs on Failure
+        if: failure()
+        working-directory: ./backend/esignet-mock
+        run: docker compose logs
+
+      # ==========================================
+      # Testing with Postman (Newman CLI)
+      # ==========================================
+      - name: Install Newman CLI
+        run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Run API Tests with Postman
+        run: |
+          mkdir -p test-results
+          newman run tests/votiix_postman_collection.json -r cli,htmlextra --reporter-htmlextra-export test-results/postman-results.html
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-test-results
+          path: test-results/postman-results.html
+
