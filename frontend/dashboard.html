@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voting Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; text-align: center; padding: 40px; }
+        .welcome-section { margin-bottom: 30px; }
+        .candidate-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 20px; max-width: 1000px; margin: 0 auto; 
+        }
+        .candidate-card { 
+            background: white; padding: 20px; border-radius: 15px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 5px solid #2980b9;
+        }
+        .key-circle { 
+            background: #2c3e50; color: white; width: 40px; height: 40px; 
+            border-radius: 50%; display: flex; align-items: center; 
+            justify-content: center; margin: 0 auto 10px; font-weight: bold;
+        }
+        h2 { color: #2c3e50; margin: 10px 0; }
+        .instruction { font-style: italic; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+
+    <div class="welcome-section">
+        <h1 id="welcomeText">Access Granted</h1>
+        <p class="instruction">Please use the physical keypad to select your candidate.</p>
+    </div>
+
+    <div class="candidate-grid" id="candidateList">
+        </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const userName = urlParams.get('name');
+        if (userName) document.getElementById('welcomeText').innerText = `Welcome, ${userName}!`;
+
+        async function loadCandidates() {
+            try {
+                const response = await fetch('http://localhost:3001/api/candidates');
+                const candidates = await response.json();
+                const list = document.getElementById('candidateList');
+                
+                list.innerHTML = candidates.map(c => `
+                    <div class="candidate-card">
+                        <div class="key-circle">${c.keypad_number}</div>
+                        <h2>${c.full_name}</h2>
+                        <p class="instruction">Press ${c.keypad_number} to vote</p>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error("Error loading candidates", err);
+            }
+        }
+        loadCandidates();
+    </script>
+</body>
+</html>
