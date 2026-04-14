@@ -30,3 +30,19 @@ export const verifyUnblindedToken = (unblindedTokenBase64: string, signatureBase
   verify.end();
   return verify.verify(publicKeyPem, signatureBase64, 'base64');
 };
+
+/**
+ * Generate a SHA-256 hash of any string input.
+ * Used for generating tx_hash for vote packages and token hashing.
+ */
+export const sha256Hash = (input: string): string => {
+  return crypto.createHash('sha256').update(input).digest('hex');
+};
+
+/**
+ * Generate a cryptographic random hex string.
+ * Used by ESP32 to generate blinded tokens (simulated server-side for POC).
+ */
+export const generateRandomToken = (bytes: number = 32): string => {
+  return crypto.randomBytes(bytes).toString('hex');
+};

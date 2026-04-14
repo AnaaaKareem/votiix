@@ -1,74 +1,108 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { z } from 'zod';
-// import { Kafka } from 'kafkajs';
+import { PrismaClient } from '@votiix/db';
+import { loadSecretsFromVault } from '@votiix/utils';
 
-const app = express();
-const PORT = process.env.PORT || 3005;
+async function main() {
+  // Step 1: Load secrets from Vault into process.env
+  await loadSecretsFromVault();
 
-app.use(express.json());
-app.use(cors());
+  // Step 2: Initialize clients
+  const app = express();
+  const PORT = process.env.PORT || 3004;
+  const prisma = new PrismaClient();
 
-// STUB Integrations
-// const kafka = new Kafka({ clientId: 'iot-engine', brokers: [process.env.KAFKA_BROKER || 'kafka:29092'] });
-// const producer = kafka.producer();
+  app.use(express.json());
+  app.use(cors());
 
-// 1. Terminal Heartbeat
-app.post('/iot/heartbeat', async (req: Request, res: Response) => {
-  const schema = z.object({
-    hardware_id: z.string(),
-    battery_level: z.number(),
-    firmware_version: z.string(),
-    status: z.string()
+  app.get('/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok', service: 'votiix-iot' });
   });
 
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+  /**
+   * POST /iot/heartbeat
+   * 
+   * Called by ESP32 every 10 seconds.
+   * Input: { "hardware_id": "esp32-01", "firmware_version": "1.0.0" }
+   * 
+   * Logic: Upserts the TERMINAL record, updating last_heartbeat and status to "Online".
+   */
+  app.post('/iot/heartbeat', async (req: Request, res: Response) => {
+    const schema = z.object({
+      hardware_id: z.string().min(1),
+      firmware_version: z.string().optional(),
+    });
 
-  // Update TERMINAL.last_heartbeat in DB
-  res.json({ ack: true, server_time: new Date().toISOString() });
-});
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-// 2. Register Terminal
-app.post('/iot/terminals', async (req: Request, res: Response) => {
-  // Logic: Insert/update TERMINAL record with mTLS cert thumbprint
-  res.json({ id: req.body.hardware_id, status: "Registered" });
-});
+    try {
+      const now = new Date();
+      await prisma.terminal.upsert({
+        where: { id: parsed.data.hardware_id },
+        create: {
+          id: parsed.data.hardware_id,
+          isActive: true,
+          lastHeartbeat: now,
+          firmwareVersion: parsed.data.firmware_version || null,
+          status: 'Online',
+        },
+        update: {
+          lastHeartbeat: now,
+          status: 'Online',
+          firmwareVersion: parsed.data.firmware_version || undefined,
+        },
+      });
 
-// 3. List Terminals for Station
-app.get('/iot/terminals', async (req: Request, res: Response) => {
-  const station_id = req.query.station_id as string;
-  // Logic: Look up TERMINAL by station_id
-  res.json([{ hardware_id: "ESP32-MAC-ADDR", status: "Online" }]);
-});
-
-// 4. Report Tamper Alert
-app.post('/iot/alert', async (req: Request, res: Response) => {
-  const schema = z.object({
-    hardware_id: z.string(),
-    alert: z.string()
+      res.json({ ack: true, server_time: now.toISOString() });
+    } catch (error) {
+      console.error('Heartbeat error:', error);
+      res.status(500).json({ error: 'Failed to process heartbeat' });
+    }
   });
 
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error });
+  /**
+   * GET /iot/terminals
+   * 
+   * Returns the fleet status for the Admin Dashboard.
+   * A terminal is "Offline" if its last_heartbeat is more than 30 seconds ago.
+   */
+  app.get('/iot/terminals', async (_req: Request, res: Response) => {
+    try {
+      const terminals = await prisma.terminal.findMany({
+        include: { station: true },
+      });
 
-  // DB logic: Auto-disable terminal (update is_active = false, status = 'Tampered')
-  
-  // Publish `terminal.alert` to Kafka
-  /*
-  await producer.send({
-    topic: 'terminal.alert',
-    messages: [
-      { value: JSON.stringify({ hardware_id: parsed.data.hardware_id, alert: parsed.data.alert, timestamp: new Date() }) }
-    ]
+      const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
+
+      const enriched = terminals.map((t: any) => ({
+        hardware_id: t.id,
+        is_active: t.isActive,
+        status: t.lastHeartbeat && t.lastHeartbeat > thirtySecondsAgo ? 'Online' : 'Offline',
+        last_heartbeat: t.lastHeartbeat?.toISOString() || null,
+        firmware_version: t.firmwareVersion,
+        station_name: t.station?.name || 'Unassigned',
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error('List terminals error:', error);
+      res.status(500).json({ error: 'Failed to list terminals' });
+    }
   });
-  */
 
-  res.json({ ack: true, alert_logged: true });
-});
+  app.get('/metrics', (_req: Request, res: Response) => {
+    res.set('Content-Type', 'text/plain');
+    res.send('# HELP votiix_iot_up Service is up\n# TYPE votiix_iot_up gauge\nvotiix_iot_up 1\n');
+  });
 
-// Start Server
-app.listen(PORT, async () => {
-  // await producer.connect();
-  console.log(`votiix-iot service listening on port ${PORT}`);
+  app.listen(PORT, () => {
+    console.log(`votiix-iot service listening on port ${PORT}`);
+  });
+}
+
+main().catch((err) => {
+  console.error('Fatal startup error:', err);
+  process.exit(1);
 });
