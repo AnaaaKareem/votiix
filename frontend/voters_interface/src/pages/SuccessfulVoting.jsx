@@ -1,7 +1,69 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../config/api';
 
 export default function SuccessfulVoting() {
   const navigate = useNavigate();
+  const [receiptHash, setReceiptHash] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const transactionHash = localStorage.getItem('vote_transaction_hash');
+
+  useEffect(() => {
+    const fetchReceipt = async () => {
+      try {
+        // Use the stored transaction hash to get the receipt
+        // First try to get the election ID by checking if we can get active elections
+        let response = await api.get('/public/elections/active');
+        let electionId = 'default'; // fallback
+
+        if (response.data && Array.isArray(response.data)) {
+          if (response.data.length > 0) {
+            electionId = response.data[0].id;
+          }
+        } else if (response.data && typeof response.data === 'object') {
+          electionId = response.data.id || 'default';
+        }
+
+        if (!transactionHash) {
+          throw new Error('No transaction hash found');
+        }
+
+        // Try to fetch the vote receipt
+        try {
+          const receiptResponse = await api.get(`/public/elections/${electionId}/vote/${transactionHash}`);
+          setReceiptHash(transactionHash);
+
+          // Store election info for potential display
+          localStorage.setItem('receipt_data', JSON.stringify(receiptResponse.data));
+
+        } catch (receiptErr) {
+          // Some implementations might return the hash in the response data
+          if (!receiptHash && transactionHash) {
+            setReceiptHash(transactionHash);
+          }
+        }
+      } catch (err) {
+        console.log('Could not retrieve receipt details:', err.message);
+        // It's not critical, the vote was still successful
+        if (transactionHash) {
+          setReceiptHash(transactionHash);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReceipt();
+
+    // Clean up any temporary vote-related state
+    localStorage.removeItem('pending_vote_candidate');
+  }, [transactionHash]);
+
+  const handleReturn = () => {
+    navigate('/language');
+  };
 
   return (
     <div className="bg-[#f8f9fc] min-h-screen flex flex-col font-sans antialiased text-[#111827]">
@@ -33,9 +95,24 @@ export default function SuccessfulVoting() {
           Your selection has been securely recorded, encrypted, and added to the blockchain ledger.
         </p>
 
-        <button onClick={() => navigate('/language')}
-          className="bg-[#eef2f6] hover:bg-[#dbe3ed] text-[#111827] transition-colors duration-200 py-3 px-8 rounded-lg font-bold text-[13px] shadow-sm focus:outline-none focus:ring-4 focus:ring-gray-200">
-          Return to Dashboard
+        {receiptHash && (
+          <div className="mb-8 p-4 bg-gray-50 rounded-lg text-sm font-mono text-gray-700 max-w-xl break-all">
+            Receipt Hash: {receiptHash}
+          </div>
+        )}
+
+        {loading && (
+          <div className="mb-8 text-gray-500">Verifying receipt details...</div>
+        )}
+
+        {(error && !loading) && (
+          <div className="mb-8 text-red-500 text-sm">{error}</div>
+        )}
+
+        <button
+          onClick={handleReturn}
+          className="bg-[#111827] hover:bg-[#0e1726] text-white transition-colors duration-200 py-3 px-8 rounded-lg font-bold text-[13px] shadow-sm focus:outline-none focus:ring-4 focus:ring-gray-200">
+          Return to Language Selection
         </button>
       </main>
 

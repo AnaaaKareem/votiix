@@ -4,7 +4,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## 🔐 1. Identity & Authentication (The "Check-In" Phase)
+## 1. Identity & Authentication (The "Check-In" Phase)
 
 ### `POST /api/v1/kiosk/identity/auth`
 *   **Functionality:** Authenticates a voter via their ESP32 fingerprint slot ID and validates their age.
@@ -24,7 +24,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## 🗳️ 2. Privacy & Tokenization (The "Anonymization" Phase)
+## 2. Privacy & Tokenization (The "Anonymization" Phase)
 
 ### `POST /api/v1/kiosk/token/sign`
 *   **Functionality:** Exchanges the PII-linked Auth JWT for a cryptographically blinded voting token.
@@ -41,7 +41,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## 📝 3. Voting & Commitment (The "Ballot" Phase)
+## 3. Voting & Commitment (The "Ballot" Phase)
 
 ### `POST /api/v1/kiosk/vote/commit`
 *   **Functionality:** Submits the final anonymous ballot choices.
@@ -60,7 +60,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## 📱 4. Proof of Vote (The "Receipt" Phase)
+## 4. Proof of Vote (The "Receipt" Phase)
 
 ### `POST /api/v1/kiosk/messenger/whatsapp`
 *   **Functionality:** Sends an end-to-end encrypted voting receipt to the user's phone.
@@ -77,7 +77,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## ⚙️ 5. IoT & Hardware Management
+## 5. IoT & Hardware Management
 
 ### `POST /api/v1/kiosk/iot/heartbeat`
 *   **Functionality:** Keeps the physical terminal status alive in the dashboard.
@@ -97,7 +97,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## 📊 6. Administration & Results
+## 6. Administration & Results
 
 ### `GET /api/v1/public/elections/{id}/results`
 *   **Functionality:** Fetches live tallies for a specifically selected election.
@@ -117,7 +117,7 @@ This document provides a highly detailed mapping of system functionality to the 
 
 ---
 
-## 🕵️ 7. Audit & Transparency
+## 7. Audit & Transparency
 
 ### `GET /api/v1/admin/audit/logs`
 *   **Functionality:** Streams the immutable MongoDB audit ledger.
