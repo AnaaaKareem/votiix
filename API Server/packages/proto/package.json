@@ -1,0 +1,6 @@
+{
+  "name": "@votiix/proto",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "Shared gRPC protobuf definitions for Votiix Backend"
+}
