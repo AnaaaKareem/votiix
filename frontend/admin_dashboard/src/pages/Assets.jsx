@@ -12,7 +12,17 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 
 const Assets = () => {
-  const [showToast, setShowToast] = useState(true);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [candidateName, setCandidateName] = useState('');
+
+  const handleAddCandidate = () => {
+    if (candidateName.trim()) {
+      setToastMessage(`Candidate ${candidateName} added successfully!`);
+      setShowToast(true);
+      setCandidateName('');
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -20,7 +30,7 @@ const Assets = () => {
         <div className="bg-emerald-500 text-white px-6 py-3 rounded-xl shadow-lg shadow-emerald-200/50 flex items-center justify-between border border-emerald-400/20">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-50" />
-            <p className="font-semibold text-sm">Candidate Alex Morgan added successfully!</p>
+            <p className="font-semibold text-sm">{toastMessage}</p>
           </div>
           <button onClick={() => setShowToast(false)} className="hover:bg-white/10 p-1 rounded-full transition-colors">
             <X className="w-4 h-4" />
@@ -51,9 +61,11 @@ const Assets = () => {
                 <div className="space-y-6">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Candidate Information</p>
                     
-                    <Input 
-                        label="Full Name" 
-                        placeholder="e.g. Alex Morgan" 
+                    <Input
+                        label="Full Name"
+                        placeholder="e.g. Alex Morgan"
+                        value={candidateName}
+                        onChange={e => setCandidateName(e.target.value)}
                     />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -85,7 +97,7 @@ const Assets = () => {
                     </div>
                 </div>
 
-                <Button className="w-full py-3.5 text-base shadow-lg shadow-primary/20 gap-2" size="lg">
+                <Button className="w-full py-3.5 text-base shadow-lg shadow-primary/20 gap-2" size="lg" onClick={handleAddCandidate}>
                     <UserPlus className="w-5 h-5" /> Add Candidate
                 </Button>
             </div>

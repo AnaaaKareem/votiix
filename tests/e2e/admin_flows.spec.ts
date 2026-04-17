@@ -23,7 +23,7 @@ test.describe('Admin Dashboard Flows', () => {
   test('Asset Management - Add Candidate', async ({ page }) => {
     await admin.gotoAssets();
     await admin.addCandidate('John Doe', 'Democratic Party');
-    await expect(page.locator('div')).toContainText('Candidate John Doe added successfully!');
+    await expect(page.locator('.bg-emerald-500')).toContainText('Candidate John Doe added successfully!');
   });
 
   test('Security - Purge Data', async ({ page }) => {

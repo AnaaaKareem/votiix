@@ -1,14 +1,15 @@
-import React from 'react';
-import { 
-  ChevronRight, 
-  Info, 
-  Calendar, 
-  Smartphone, 
-  Shield, 
-  Map, 
-  Plus, 
-  Settings, 
-  Upload, 
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  ChevronRight,
+  Info,
+  Calendar,
+  Smartphone,
+  Shield,
+  Map,
+  Plus,
+  Settings,
+  Upload,
   FileText,
   Fingerprint
 } from 'lucide-react';
@@ -16,6 +17,15 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 
 const CreateElection = () => {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState('');
+
+  const handleSave = () => {
+    if (title.trim()) {
+      navigate('/');
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="flex items-center justify-between">
@@ -32,7 +42,7 @@ const CreateElection = () => {
         </div>
         <div className="flex items-center gap-3">
             <Button variant="secondary" className="px-6">Discard</Button>
-            <Button className="px-6 gap-2 bg-slate-900">
+            <Button className="px-6 gap-2 bg-slate-900" onClick={handleSave}>
                 <FileText className="w-4 h-4" /> Save Election
             </Button>
         </div>
@@ -49,9 +59,11 @@ const CreateElection = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <Input 
-                        label="Election Title" 
-                        placeholder="e.g. 2024 Presidential General Election" 
+                    <Input
+                        label="Election Title"
+                        placeholder="e.g. 2024 Presidential General Election"
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
                     />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

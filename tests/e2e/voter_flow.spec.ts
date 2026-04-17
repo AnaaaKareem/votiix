@@ -9,6 +9,18 @@ test.describe('Voter E2E Flow', () => {
   });
 
   test('Happy Path: Full Voting Cycle', async ({ page }) => {
+    // Mock identity auth API
+    await page.route('**/kiosk/identity/auth', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ token: 'test-jwt-token' })
+    }));
+    await page.route('**/kiosk/token/sign', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ token: 'test-signed-token' })
+    }));
+
     // 1. Enrollment
     await voter.gotoEnrollment();
     await voter.enterNationalId('1234567890');
@@ -31,6 +43,11 @@ test.describe('Voter E2E Flow', () => {
     await voter.confirmVote();
 
     // 5. Final Verification (Fingerprint for commit)
+    await page.route('**/kiosk/vote/commit', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ tx_hash: 'tx_abc123' })
+    }));
     await voter.gotoVerify();
     await voter.simulateFingerprintScan();
 
