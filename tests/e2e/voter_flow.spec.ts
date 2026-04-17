@@ -50,6 +50,6 @@ test.describe('Voter E2E Flow', () => {
     }));
 
     await voter.simulateFingerprintScan();
-    await expect(page.locator('div')).toContainText('Fingerprint not recognized');
+    await expect(page.locator('.bg-red-50')).toContainText('Fingerprint not recognized');
   });
 });

@@ -20,9 +20,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        with:
-          args: >
-            -Dsonar.projectKey=votiix
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
@@ -136,12 +133,17 @@ jobs:
           name: voters-interface-build
           path: ./frontend/voters_interface/dist
 
-      - name: Start Frontend Preview Server
-        working-directory: ./frontend/voters_interface
+      - name: Download Admin Build
+        uses: actions/download-artifact@v4
+        with:
+          name: admin-dashboard-build
+          path: ./frontend/admin_dashboard/dist
+
+      - name: Start Frontend Preview Servers
         shell: bash
         run: |
-          npm install
-          npx vite preview --port 5173 --host &
+          cd ./frontend/voters_interface && npm install && npx vite preview --port 5173 --host &
+          cd ./frontend/admin_dashboard && npm install && npx vite preview --port 5174 --host &
 
       - name: Setup Playwright
         run: |
@@ -201,4 +203,3 @@ jobs:
         with:
           name: admin-dashboard-build
           path: ./frontend/admin_dashboard/dist
-

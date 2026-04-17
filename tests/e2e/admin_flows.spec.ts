@@ -4,6 +4,8 @@ import { AdminPage } from '../pages/admin.page';
 test.describe('Admin Dashboard Flows', () => {
   let admin: AdminPage;
 
+  test.use({ baseURL: 'http://localhost:5174' });
+
   test.beforeEach(async ({ page }) => {
     admin = new AdminPage(page);
   });

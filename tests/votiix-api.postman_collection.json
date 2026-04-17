@@ -214,7 +214,7 @@
 				{
 					"name": "TC-VR01: Register Voter - Valid",
 					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Not voted', () => pm.expect(pm.response.json().hasVoted).to.be.false);"], "type": "text/javascript"}}],
-					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"mosip_uin\": \"UIN-TEST-001\", \"fingerprint_id\": 42}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"mosip_uin\": \"UIN-TEST-001\", \"fingerprint_id\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
 				},
 				{
 					"name": "TC-VR02: Register Duplicate UIN",

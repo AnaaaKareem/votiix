@@ -29,12 +29,12 @@ export class AdminPage {
 
   // Actions
   async createElection(title: string) {
-    await this.page.fill('input[label="Election Title"]', title);
+    await this.page.getByLabel('Election Title').fill(title);
     await this.page.click('button:has-text("Save Election")');
   }
 
   async addCandidate(name: string, party: string) {
-    await this.page.fill('input[label="Full Name"]', name);
+    await this.page.getByLabel('Full Name').fill(name);
     // Handle select if needed
     await this.page.click('button:has-text("Add Candidate")');
   }
@@ -44,7 +44,7 @@ export class AdminPage {
   }
 
   async performPurge(phrase: string = 'ARCHIVE') {
-    await this.page.fill('input[placeholder="ARCHIVE"]', phrase);
+    await this.page.getByPlaceholder('ARCHIVE').fill(phrase);
     await this.page.click('button:has-text("Execute Purge")');
   }
 

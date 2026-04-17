@@ -73,5 +73,5 @@ jobs:
       - name: Stop Services
         if: always()
         run: |
-          cd ./backend && docker compose down
-          cd ./backend/esignet-mock && docker compose down
+          docker compose -f ./backend/docker-compose.yml down || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml down || true
