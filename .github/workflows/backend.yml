@@ -3,7 +3,7 @@ name: MOSIP Tests
 on:
   push:
     paths:
-      - 'backend/esignet-mock/**'
+      - 'esignet-mock/**'
       - 'backend/tests/**'
     branches: [ backend ]
 
@@ -57,7 +57,7 @@ jobs:
       - name: Run API Tests with Postman
         run: |
           mkdir -p test-results
-          newman run tests/votiix_postman_collection.json -r cli,htmlextra --reporter-htmlextra-export test-results/postman-results.html
+          newman run API Server/votiix-api.postman_collection.json -r cli,htmlextra --reporter-htmlextra-export test-results/postman-results.html
 
       - name: Upload Test Results
         if: always()
@@ -65,4 +65,3 @@ jobs:
         with:
           name: postman-test-results
           path: test-results/postman-results.html
-
