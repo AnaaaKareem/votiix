@@ -1,0 +1,16 @@
+{
+  "name": "votiix-hardware-server",
+  "version": "1.0.0",
+  "description": "Omar's ESP32 hardware backend API for Votiix voting system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "socket.io": "^4.7.4"
+  }
+}

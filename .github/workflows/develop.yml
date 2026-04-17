@@ -1,0 +1,234 @@
+name: Votiix Develop Integration
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  # Static Analysis (SonarQube)
+  sonarqube:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=votiix
+
+  # Frontend Build (Voters & Admin)
+  frontend-ci:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Voters Interface
+        working-directory: ./frontend/voters_interface
+        run: |
+          npm install
+          npm run build
+
+      - name: Build Admin Dashboard
+        working-directory: ./frontend/admin_dashboard
+        run: |
+          npm install
+          npm run build
+
+      - name: Upload Voters Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: voters-interface-build
+          path: ./frontend/voters_interface/dist
+          retention-days: 14
+
+      - name: Upload Admin Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dashboard-build
+          path: ./frontend/admin_dashboard/dist
+          retention-days: 14
+
+  # Backend CI & API Integration (The Dynamic Runner)
+  backend-integration:
+    name: Backend API & Integration
+    needs: [frontend-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Start eSignet Mock Services
+        working-directory: ./backend/esignet-mock
+        run: docker compose up --build -d
+
+      - name: Start Votiix Backend Services
+        working-directory: ./backend
+        run: docker compose up --build -d
+
+      # Dynamic Health Checker
+      - name: Wait for Services to be Ready
+        run: |
+          echo "Waiting for Votiix Ecosystem..."
+
+          for i in {1..48}; do
+            echo "Attempt $i/48..."
+
+            # Check esignet (302 redirect means it's running)
+            ESIGNET=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088/v1/esignet/swagger-ui.html 2>/dev/null)
+            if [ "$ESIGNET" = "302" ] || [ "$ESIGNET" = "200" ]; then
+              echo "✓ eSignet Mock (8088) ready (HTTP $ESIGNET)"
+              ESIGNET_OK=1
+            else
+              echo "✗ eSignet Mock (8088) not ready (HTTP $ESIGNET)"
+              ESIGNET_OK=0
+            fi
+
+            # Check mock identity (port reachable = service up)
+            MOCK_ID=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/ 2>/dev/null)
+            if [ "$MOCK_ID" != "000" ]; then
+              echo "✓ Mock Identity (8082) ready (HTTP $MOCK_ID)"
+              MOCK_OK=1
+            else
+              echo "✗ Mock Identity (8082) not ready"
+              MOCK_OK=0
+            fi
+
+            # Check all microservices through KrakenD
+            ALL_SERVICES_OK=1
+            for svc in identity token vote-engine core iot observer messenger; do
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/health/$svc 2>/dev/null)
+              if [ "$CODE" = "200" ]; then
+                echo "  ✓ $svc ready"
+              else
+                echo "  ✗ $svc not ready (HTTP $CODE)"
+                ALL_SERVICES_OK=0
+              fi
+            done
+
+            if [ "$ESIGNET_OK" = "1" ] && [ "$MOCK_OK" = "1" ] && [ "$ALL_SERVICES_OK" = "1" ]; then
+              echo "All services are Healthy! Starting tests..."
+              exit 0
+            fi
+
+            # Show container logs every 60s
+            if [ $((i % 12)) -eq 0 ]; then
+              echo "=== Container logs (every 60s) ==="
+              docker compose -f ./backend/docker-compose.yml logs --tail=20 krakend votiix-identity 2>/dev/null || true
+              docker compose -f ./backend/esignet-mock/docker-compose.yml logs --tail=20 esignet mock-identity-system 2>/dev/null || true
+            fi
+
+            sleep 5
+          done
+
+          echo "Timeout reached. Dumping all logs..."
+          docker compose -f ./backend/docker-compose.yml logs 2>/dev/null || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml logs 2>/dev/null || true
+          exit 1
+
+      - name: Push Database Schema
+        env:
+          DATABASE_URL: postgresql://votiix:votiix_password@localhost:5432/ballot_db?schema=public
+        run: npx -y prisma@5.10.2 db push --schema=backend/packages/db/prisma/schema.prisma --accept-data-loss
+
+      - name: Install Newman & Run API Tests
+        continue-on-error: true
+        run: |
+          npm install -g newman newman-reporter-htmlextra
+          mkdir -p reports/api-tests
+          newman run tests/votiix-api.postman_collection.json \
+            -r cli,htmlextra,json \
+            --reporter-htmlextra-export reports/api-tests/votiix-api-report.html \
+            --reporter-json-export reports/api-tests/votiix-api-report.json
+
+      - name: Upload API Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-integration-report
+          path: reports/api-tests/
+          retention-days: 30
+
+      - name: Upload Backend Config Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-config-snapshot
+          path: |
+            backend/krakend/krakend.json
+            backend/packages/db/prisma/schema.prisma
+            backend/docker-compose.yml
+          retention-days: 30
+
+      - name: Download Voters Build
+        uses: actions/download-artifact@v4
+        with:
+          name: voters-interface-build
+          path: ./frontend/voters_interface/dist
+
+      - name: Download Admin Build
+        uses: actions/download-artifact@v4
+        with:
+          name: admin-dashboard-build
+          path: ./frontend/admin_dashboard/dist
+
+      - name: Start Frontend Preview Servers
+        shell: bash
+        run: |
+          cd ./frontend/voters_interface && npm install && npx vite preview --port 5173 --host &
+          cd ./frontend/admin_dashboard && npm install && npx vite preview --port 5174 --host &
+
+      - name: Setup Playwright
+        run: |
+          npm install @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E Flows
+        continue-on-error: true
+        run: npx playwright test --config=tests/playwright.config.ts
+
+      - name: Upload E2E Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+
+      - name: Upload Docker Logs on Failure
+        if: failure()
+        run: |
+          mkdir -p reports/docker-logs
+          docker compose -f ./backend/docker-compose.yml logs > reports/docker-logs/backend-services.log 2>&1 || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml logs > reports/docker-logs/esignet-services.log 2>&1 || true
+
+      - name: Upload Docker Logs Artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: reports/docker-logs/
+          retention-days: 14
+
+      - name: Stop Services
+        if: always()
+        run: |
+          docker compose -f ./backend/docker-compose.yml down || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml down || true

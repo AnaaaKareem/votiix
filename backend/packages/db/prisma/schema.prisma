@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. POLLING STATION & TERMINALS
+// ==========================================
+
+model PollingStation {
+  id               String        @id @default(uuid()) @db.Uuid
+  name             String
+  address          String
+  terminalCapacity Int           @map("terminal_capacity")
+  terminals        Terminal[]
+  votePackages     VotePackage[]
+  officers         Officer[]
+
+  @@map("polling_station")
+}
+
+model Terminal {
+  id                 String          @id @map("hardware_id")
+  isActive           Boolean         @default(true) @map("is_active")
+  lastHeartbeat      DateTime?       @map("last_heartbeat")
+  firmwareVersion    String?         @map("firmware_version")
+  status             String          @default("Offline") // "Online, Offline, Tampered, Maintenance"
+  assignedStationId  String?         @map("assigned_station_id") @db.Uuid
+  station            PollingStation? @relation(fields: [assignedStationId], references: [id])
+
+  @@map("terminal")
+}
+
+// ==========================================
+// 2. ELECTION LIFECYCLE
+// ==========================================
+
+model Election {
+  id              String           @id @default(uuid()) @db.Uuid
+  title           String
+  startDate       DateTime         @map("start_date")
+  endDate         DateTime         @map("end_date")
+  status          String           @default("Draft") // "Draft, Active, Closed, Tallying, Archived, Purged"
+  rsaPublicKey    String?          @map("rsa_public_key")
+  rsaPrivateKey   String?          @map("rsa_private_key")
+  retentionPolicy RetentionPolicy?
+  contests        Contest[]
+  voterRegistries VoterRegistry[]
+  blindTokens     BlindToken[]
+
+  @@map("election")
+}
+
+model RetentionPolicy {
+  id                   String   @id @default(uuid()) @db.Uuid
+  electionId           String   @unique @map("election_id") @db.Uuid
+  election             Election @relation(fields: [electionId], references: [id])
+  piiPurgeDays         Int      @map("pii_purge_days")
+  wipeBiometricHashes  Boolean  @default(true) @map("wipe_biometric_hashes")
+  archiveAfterDays     Int      @map("archive_after_days")
+
+  @@map("retention_policy")
+}
+
+model Contest {
+  id             String         @id @default(uuid()) @db.Uuid
+  electionId     String         @map("election_id") @db.Uuid
+  election       Election       @relation(fields: [electionId], references: [id])
+  officeTitle    String         @map("office_title")
+  seatsAvailable Int            @default(1) @map("seats_available")
+  candidates     Candidate[]
+  votePackages   VotePackage[]
+  tallyResults   TallyResult[]
+
+  @@map("contest")
+}
+
+// ==========================================
+// 3. CANDIDATES & PARTIES
+// ==========================================
+
+model Party {
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  shortCode  String      @map("short_code")
+  logoUrl    String?     @map("logo_url")    // MinIO URL
+  candidates Candidate[]
+
+  @@map("party")
+}
+
+model Candidate {
+  id           String        @id @default(uuid()) @db.Uuid
+  contestId    String        @map("contest_id") @db.Uuid
+  contest      Contest       @relation(fields: [contestId], references: [id])
+  partyId      String?       @map("party_id") @db.Uuid
+  party        Party?        @relation(fields: [partyId], references: [id])
+  name         String
+  photoUrl     String?       @map("photo_url") // MinIO URL
+  listPosition Int?          @map("list_position")
+  tallyResult  TallyResult?
+
+  @@map("candidate")
+}
+
+// ==========================================
+// 4. VOTER IDENTITY (MOSIP eSignet FINGER ID)
+// ==========================================
+
+model VoterRegistry {
+  id              String       @id @default(uuid()) @db.Uuid
+  electionId      String       @map("election_id") @db.Uuid
+  election        Election     @relation(fields: [electionId], references: [id])
+  mosipUin        String       @map("mosip_uin")
+  fingerprintId   Int          @map("fingerprint_id")
+  hasVoted        Boolean      @default(false) @map("has_voted")
+  tokenIssuedAt   DateTime?    @map("token_issued_at")
+  authSessionId   String?      @unique @map("auth_session_id") @db.Uuid
+  authSession     AuthSession? @relation(fields: [authSessionId], references: [id])
+
+  @@unique([electionId, mosipUin])
+  @@map("voter_registry")
+}
+
+model AuthSession {
+  id            String         @id @default(uuid()) @db.Uuid
+  mosipUin      String         @map("mosip_uin")
+  terminalId    String         @map("terminal_id")
+  jwtToken      String         @map("jwt_token")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  expiresAt     DateTime       @map("expires_at")
+  status        String         @default("Active") // "Active, Used, Expired"
+  voterRegistry VoterRegistry?
+
+  @@map("auth_session")
+}
+
+// ==========================================
+// 5. BLIND TOKENS & VOTES
+// ==========================================
+
+model BlindToken {
+  hash           String        @id @map("token_hash")
+  electionId     String        @map("election_id") @db.Uuid
+  election       Election      @relation(fields: [electionId], references: [id])
+  isUsed         Boolean       @default(false) @map("is_used")
+  issuedAt       DateTime      @default(now()) @map("issued_at")
+  usedAt         DateTime?     @map("used_at")
+  votePackage    VotePackage?
+
+  @@map("blind_token")
+}
+
+model VotePackage {
+  id                 String          @id @default(uuid()) @db.Uuid
+  contestId          String          @map("contest_id") @db.Uuid
+  contest            Contest         @relation(fields: [contestId], references: [id])
+  pollingStationId   String?         @map("polling_station_id") @db.Uuid
+  pollingStation     PollingStation? @relation(fields: [pollingStationId], references: [id])
+  selections         Json            // Array of candidate UUIDs
+  blindTokenHash     String          @unique @map("blind_token_hash")
+  blindToken         BlindToken      @relation(fields: [blindTokenHash], references: [hash])
+  txHash             String          @unique @map("tx_hash")
+  timestamp          DateTime        @default(now())
+
+  @@map("vote_package")
+}
+
+// ==========================================
+// 6. TALLYING & RESULTS
+// ==========================================
+
+model TallyResult {
+  id            String    @id @default(uuid()) @db.Uuid
+  contestId     String    @map("contest_id") @db.Uuid
+  contest       Contest   @relation(fields: [contestId], references: [id])
+  candidateId   String    @unique @map("candidate_id") @db.Uuid
+  candidate     Candidate @relation(fields: [candidateId], references: [id])
+  voteCount     Int       @default(0) @map("vote_count")
+  lastUpdated   DateTime  @default(now()) @updatedAt @map("last_updated")
+  status        String    @default("Provisional")
+
+  @@map("tally_result")
+}
+
+// ==========================================
+// 7. ADMIN & OFFICER AUTH
+// ==========================================
+
+model Admin {
+  id           String @id @default(uuid()) @db.Uuid
+  username     String @unique
+  passwordHash String @map("password_hash")
+  role         String @default("Admin") // "Admin, DPO"
+
+  @@map("admin")
+}
+
+model Officer {
+  id                String          @id @default(uuid()) @db.Uuid
+  officerId         String          @unique @map("officer_id")
+  username          String          @unique
+  passwordHash      String          @map("password_hash")
+  assignedStationId String?         @map("assigned_station_id") @db.Uuid
+  station           PollingStation? @relation(fields: [assignedStationId], references: [id])
+  role              String          @default("Officer") // "Senior Officer, Officer"
+
+  @@map("officer")
+}
