@@ -20,9 +20,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        with:
-          args: >
-            -Dsonar.projectKey=votiix
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
@@ -145,8 +142,8 @@ jobs:
 
       - name: Setup Playwright
         run: |
-          npm install
-          npx playwright install --with-deps
+          npm install @playwright/test
+          npx playwright install --with-deps chromium
 
       - name: Run E2E Flows
         run: npx playwright test --config=tests/playwright.config.ts
@@ -201,3 +198,4 @@ jobs:
         with:
           name: admin-dashboard-build
           path: ./frontend/admin_dashboard/dist
+
