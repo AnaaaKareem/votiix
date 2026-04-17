@@ -8,8 +8,14 @@
 # For PRODUCTION: Replace placeholder values with actual secrets before deployment.
 # ============================================
 
+set -e
+
 # Wait for Vault to be ready
-sleep 3
+echo "=== Waiting for Vault to be ready ==="
+until vault status >/dev/null 2>&1; do
+  echo "Vault is unavailable - sleeping"
+  sleep 2
+done
 
 export VAULT_TOKEN='votiix-dev-root-token'
 

@@ -102,6 +102,14 @@ jobs:
           docker compose -f ./backend/esignet-mock/docker-compose.yml logs 2>/dev/null || true
           exit 1
 
+      - name: Push Database Schema
+        working-directory: ./backend/packages/db
+        env:
+          DATABASE_URL: postgresql://votiix:votiix_password@localhost:5432/ballot_db?schema=public
+        run: |
+          npm install
+          npx prisma db push
+
       - name: Install Newman & Run Tests
         run: |
           npm install -g newman newman-reporter-htmlextra
