@@ -1,0 +1,183 @@
+name: Votiix Develop Integration
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  # Static Analysis (SonarQube)
+  sonarqube:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # Backend CI & API Integration (The Dynamic Runner)
+  backend-integration:
+    name: Backend API & Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './backend/package-lock.json'
+
+      - name: Build Shared Packages
+        working-directory: ./backend
+        run: |
+          npm ci
+          npm run build --workspaces --if-present
+
+      - name: Start eSignet Mock Services
+        working-directory: ./backend/esignet-mock
+        run: docker compose up --build -d
+
+      - name: Start Votiix Backend Services
+        working-directory: ./backend
+        run: docker compose up --build -d
+
+      # Dynamic Health Checker
+      - name: Wait for Services to be Ready
+        run: |
+          echo "Waiting for Votiix Ecosystem..."
+
+          # Endpoints to check:
+          # 8088: eSignet Mock
+          # 8082: Mock Identity
+          # 8080: KrakenD Gateway
+
+          timeout 240 bash -c '
+          until \
+            curl -sf http://localhost:8088/v1/esignet/swagger-ui.html && \
+            curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html && \
+            curl -sf http://localhost:8080/__health;
+          do
+            echo "Waiting for services... (Retry in 5s)"
+            sleep 5
+          done'
+
+          echo "All services are Healthy! Starting tests..."
+
+      - name: Install Newman & Run Tests
+        run: |
+          npm install -g newman newman-reporter-htmlextra
+          mkdir -p reports/api-tests
+          newman run tests/votiix-api.postman_collection.json \
+            -r cli,htmlextra \
+            --reporter-htmlextra-export reports/api-tests/votiix-api-report.html
+
+      - name: Export API Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-integration-report
+          path: reports/api-tests/votiix-api-report.html
+
+      - name: Stop Services
+        if: always()
+        run: |
+          cd ./backend && docker compose down
+          cd ./backend/esignet-mock && docker compose down
+
+  # Frontend Build (Voters & Admin)
+  frontend-ci:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './frontend/voters_interface/package-lock.json'
+
+      - name: Build Voters Interface
+        working-directory: ./frontend/voters_interface
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Admin Dashboard
+        working-directory: ./frontend/admin_dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload Voters Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: voters-interface-build
+          path: ./frontend/voters_interface/dist
+
+      - name: Upload Admin Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dashboard-build
+          path: ./frontend/admin_dashboard/dist
+
+  # End-to-End (Playwright)
+  e2e-testing:
+    needs: [backend-integration, frontend-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Start eSignet Mock Services
+        working-directory: ./backend/esignet-mock
+        run: docker compose up --build -d
+
+      - name: Start Votiix Backend Services
+        working-directory: ./backend
+        run: docker compose up --build -d
+
+      - name: Wait for Services
+        run: |
+          timeout 240 bash -c '
+          until curl -sf http://localhost:8088/v1/esignet/swagger-ui.html && \
+                curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html && \
+                curl -sf http://localhost:8080/__health; do
+            echo "Waiting for services..."
+            sleep 5
+          done'
+
+      - name: Setup Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps
+
+      - name: Run E2E Flows
+        run: npx playwright test --config=tests/playwright.config.ts
+
+      - name: Upload E2E Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            playwright-report/
+            test-results/
+        retention-days: 14
+
+      - name: Stop Services
+        if: always()
+        run: |
+          cd ./backend && docker compose down
+          cd ./backend/esignet-mock && docker compose down
