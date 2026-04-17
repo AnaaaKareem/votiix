@@ -44,23 +44,60 @@ jobs:
       - name: Wait for Services to be Ready
         run: |
           echo "Waiting for Votiix Ecosystem..."
+          echo "Checking container status..."
+          docker ps -a
 
           # Endpoints to check:
           # 8088: eSignet Mock
           # 8082: Mock Identity
           # 8080: KrakenD Gateway
 
-          timeout 240 bash -c '
-          until \
-            curl -sf http://localhost:8088/v1/esignet/swagger-ui.html && \
-            curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html && \
-            curl -sf http://localhost:8080/__health;
-          do
-            echo "Waiting for services... (Retry in 5s)"
-            sleep 5
-          done'
+          for i in {1..48}; do
+            echo "Attempt $i/48..."
 
-          echo "All services are Healthy! Starting tests..."
+            # Check esignet
+            if curl -sf http://localhost:8088/v1/esignet/swagger-ui.html 2>/dev/null; then
+              echo "✓ eSignet Mock (8088) ready"
+            else
+              echo "✗ eSignet Mock (8088) not ready"
+            fi
+
+            # Check mock identity
+            if curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html 2>/dev/null; then
+              echo "✓ Mock Identity (8082) ready"
+            else
+              echo "✗ Mock Identity (8082) not ready"
+            fi
+
+            # Check KrakenD
+            if curl -sf http://localhost:8080/__health 2>/dev/null; then
+              echo "✓ KrakenD (8080) ready"
+            else
+              echo "✗ KrakenD (8080) not ready"
+            fi
+
+            # All ready?
+            if curl -sf http://localhost:8088/v1/esignet/swagger-ui.html 2>/dev/null && \
+               curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html 2>/dev/null && \
+               curl -sf http://localhost:8080/__health 2>/dev/null; then
+              echo "All services are Healthy! Starting tests..."
+              exit 0
+            fi
+
+            # Show container logs on failure
+            if [ $((i % 12)) -eq 0 ]; then
+              echo "=== Container logs (every 60s) ==="
+              docker compose -f ./backend/docker-compose.yml logs --tail=20 krakend votiix-identity 2>/dev/null || true
+              docker compose -f ./backend/esignet-mock/docker-compose.yml logs --tail=20 esignet mock-identity-system 2>/dev/null || true
+            fi
+
+            sleep 5
+          done
+
+          echo "Timeout reached. Dumping all logs..."
+          docker compose -f ./backend/docker-compose.yml logs 2>/dev/null || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml logs 2>/dev/null || true
+          exit 1
 
       - name: Install Newman & Run Tests
         run: |

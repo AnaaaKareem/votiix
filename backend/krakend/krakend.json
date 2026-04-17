@@ -406,6 +406,17 @@
         "host": ["http://votiix-messenger:3006"],
         "encoding": "no-op"
       }]
+    },
+    {
+      "@comment": "Gateway health check for CI/CD",
+      "endpoint": "/__health",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-identity:3000"],
+        "encoding": "no-op"
+      }]
     }
   ]
 }
