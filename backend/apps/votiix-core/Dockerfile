@@ -8,7 +8,7 @@ COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/votiix-core ./apps/votiix-core
 
-RUN npm ci
+RUN npm install
 RUN cd packages/db && npm run generate || true
 
 # Build shared packages
