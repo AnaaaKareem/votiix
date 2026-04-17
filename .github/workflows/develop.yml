@@ -24,6 +24,7 @@ jobs:
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
     name: Backend API & Integration
+    needs: [frontend-ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +126,38 @@ jobs:
           name: api-integration-report
           path: reports/api-tests/votiix-api-report.html
 
+
+      - name: Download Voters Build
+        uses: actions/download-artifact@v4
+        with:
+          name: voters-interface-build
+          path: ./frontend/voters_interface/dist
+
+      - name: Start Frontend Preview Server
+        working-directory: ./frontend/voters_interface
+        shell: bash
+        run: |
+          npm install
+          npx vite preview --port 5173 --host &
+
+      - name: Setup Playwright
+        run: |
+          npm install
+          npx playwright install --with-deps
+
+      - name: Run E2E Flows
+        run: npx playwright test --config=tests/playwright.config.ts
+
+      - name: Upload E2E Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
       - name: Stop Services
         if: always()
         run: |
@@ -165,69 +198,3 @@ jobs:
         with:
           name: admin-dashboard-build
           path: ./frontend/admin_dashboard/dist
-
-  # End-to-End (Playwright)
-  e2e-testing:
-    needs: [backend-integration, frontend-ci]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Download Voters Build
-        uses: actions/download-artifact@v4
-        with:
-          name: voters-interface-build
-          path: ./frontend/voters_interface/dist
-
-      - name: Start eSignet Mock Services
-        working-directory: ./backend/esignet-mock
-        run: docker compose up --build -d
-
-      - name: Start Votiix Backend Services
-        working-directory: ./backend
-        run: docker compose up --build -d
-
-      - name: Wait for Services
-        run: |
-          timeout 240 bash -c '
-          until curl -sf http://localhost:8088/v1/esignet/swagger-ui.html && \
-                curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html && \
-                curl -sf http://localhost:8080/__health; do
-            echo "Waiting for services..."
-            sleep 5
-          done'
-
-      - name: Start Frontend Preview Server
-        working-directory: ./frontend/voters_interface
-        shell: bash
-        run: |
-          npm install
-          npx vite preview --port 5173 --host &
-
-      - name: Setup Playwright
-        run: |
-          npm install
-          npx playwright install --with-deps
-
-      - name: Run E2E Flows
-        run: npx playwright test --config=tests/playwright.config.ts
-
-      - name: Upload E2E Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-report
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 14
-
-      - name: Stop Services
-        if: always()
-        run: |
-          docker compose -f ./backend/docker-compose.yml down || true
-          docker compose -f ./backend/esignet-mock/docker-compose.yml down || true
