@@ -38,8 +38,6 @@ async function main() {
     clientReady = false;
   });
 
-  client.initialize();
-
   app.use(express.json());
   app.use(cors());
 
@@ -128,6 +126,13 @@ async function main() {
 
   app.listen(PORT, () => {
     console.log(`votiix-messenger service listening on port ${PORT}`);
+
+    // Initialize WhatsApp AFTER Express is listening so /health stays available
+    // even if Puppeteer/Chromium is unavailable (e.g. CI, minimal containers)
+    client.initialize().catch((err: any) => {
+      console.warn('[WhatsApp] Failed to initialize (Chromium likely unavailable):', err.message);
+      console.warn('[WhatsApp] Service will continue without WhatsApp support.');
+    });
   });
 }
 
