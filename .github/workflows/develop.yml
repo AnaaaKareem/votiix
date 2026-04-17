@@ -47,7 +47,7 @@ jobs:
 
           # eSignet: 302 redirect on swagger = service is up
           # Mock Identity: no swagger, just check TCP port
-          # KrakenD: /api/v1/health/identity endpoint
+          # KrakenD: proxy health endpoints for all microservices
 
           for i in {1..48}; do
             echo "Attempt $i/48..."
@@ -72,17 +72,19 @@ jobs:
               MOCK_OK=0
             fi
 
-            # Check KrakenD (uses /api/v1/health/identity which proxies to votiix-identity /health)
-            KRAKEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/health/identity 2>/dev/null)
-            if [ "$KRAKEND" = "200" ]; then
-              echo "✓ KrakenD (8080) ready (HTTP $KRAKEND)"
-              KRAKEND_OK=1
-            else
-              echo "✗ KrakenD (8080) not ready (HTTP $KRAKEND)"
-              KRAKEND_OK=0
-            fi
+            # Check all microservices through KrakenD
+            ALL_SERVICES_OK=1
+            for svc in identity token vote-engine core iot observer messenger; do
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/health/$svc 2>/dev/null)
+              if [ "$CODE" = "200" ]; then
+                echo "  ✓ $svc ready"
+              else
+                echo "  ✗ $svc not ready (HTTP $CODE)"
+                ALL_SERVICES_OK=0
+              fi
+            done
 
-            if [ "$ESIGNET_OK" = "1" ] && [ "$MOCK_OK" = "1" ] && [ "$KRAKEND_OK" = "1" ]; then
+            if [ "$ESIGNET_OK" = "1" ] && [ "$MOCK_OK" = "1" ] && [ "$ALL_SERVICES_OK" = "1" ]; then
               echo "All services are Healthy! Starting tests..."
               exit 0
             fi
@@ -103,12 +105,9 @@ jobs:
           exit 1
 
       - name: Push Database Schema
-        working-directory: ./backend/packages/db
         env:
           DATABASE_URL: postgresql://votiix:votiix_password@localhost:5432/ballot_db?schema=public
-        run: |
-          npm install
-          npx prisma db push
+        run: npx -y prisma db push --schema=backend/packages/db/prisma/schema.prisma --skip-generate --accept-data-loss
 
       - name: Install Newman & Run Tests
         run: |
