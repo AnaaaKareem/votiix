@@ -44,47 +44,50 @@ jobs:
       - name: Wait for Services to be Ready
         run: |
           echo "Waiting for Votiix Ecosystem..."
-          echo "Checking container status..."
-          docker ps -a
 
-          # Endpoints to check:
-          # 8088: eSignet Mock
-          # 8082: Mock Identity
-          # 8080: KrakenD Gateway
+          # eSignet: 302 redirect on swagger = service is up
+          # Mock Identity: no swagger, just check TCP port
+          # KrakenD: /api/v1/health/identity endpoint
 
           for i in {1..48}; do
             echo "Attempt $i/48..."
 
-            # Check esignet
-            if curl -sf http://localhost:8088/v1/esignet/swagger-ui.html 2>/dev/null; then
-              echo "✓ eSignet Mock (8088) ready"
+            # Check esignet (302 redirect means it's running)
+            ESIGNET=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088/v1/esignet/swagger-ui.html 2>/dev/null)
+            if [ "$ESIGNET" = "302" ] || [ "$ESIGNET" = "200" ]; then
+              echo "✓ eSignet Mock (8088) ready (HTTP $ESIGNET)"
+              ESIGNET_OK=1
             else
-              echo "✗ eSignet Mock (8088) not ready"
+              echo "✗ eSignet Mock (8088) not ready (HTTP $ESIGNET)"
+              ESIGNET_OK=0
             fi
 
-            # Check mock identity
-            if curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html 2>/dev/null; then
-              echo "✓ Mock Identity (8082) ready"
+            # Check mock identity (port reachable = service up)
+            MOCK_ID=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/ 2>/dev/null)
+            if [ "$MOCK_ID" != "000" ]; then
+              echo "✓ Mock Identity (8082) ready (HTTP $MOCK_ID)"
+              MOCK_OK=1
             else
               echo "✗ Mock Identity (8082) not ready"
+              MOCK_OK=0
             fi
 
-            # Check KrakenD
-            if curl -sf http://localhost:8080/__health 2>/dev/null; then
-              echo "✓ KrakenD (8080) ready"
+            # Check KrakenD (uses /api/v1/health/identity which proxies to votiix-identity /health)
+            KRAKEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/health/identity 2>/dev/null)
+            if [ "$KRAKEND" = "200" ]; then
+              echo "✓ KrakenD (8080) ready (HTTP $KRAKEND)"
+              KRAKEND_OK=1
             else
-              echo "✗ KrakenD (8080) not ready"
+              echo "✗ KrakenD (8080) not ready (HTTP $KRAKEND)"
+              KRAKEND_OK=0
             fi
 
-            # All ready?
-            if curl -sf http://localhost:8088/v1/esignet/swagger-ui.html 2>/dev/null && \
-               curl -sf http://localhost:8082/v1/mockidentitysystem/swagger-ui.html 2>/dev/null && \
-               curl -sf http://localhost:8080/__health 2>/dev/null; then
+            if [ "$ESIGNET_OK" = "1" ] && [ "$MOCK_OK" = "1" ] && [ "$KRAKEND_OK" = "1" ]; then
               echo "All services are Healthy! Starting tests..."
               exit 0
             fi
 
-            # Show container logs on failure
+            # Show container logs every 60s
             if [ $((i % 12)) -eq 0 ]; then
               echo "=== Container logs (every 60s) ==="
               docker compose -f ./backend/docker-compose.yml logs --tail=20 krakend votiix-identity 2>/dev/null || true
