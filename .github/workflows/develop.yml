@@ -37,7 +37,7 @@ jobs:
       - name: Build Shared Packages
         working-directory: ./backend
         run: |
-          npm ci
+          npm install
           npm run build --workspaces --if-present
 
       - name: Start eSignet Mock Services
@@ -88,8 +88,8 @@ jobs:
       - name: Stop Services
         if: always()
         run: |
-          cd ./backend && docker compose down
-          cd ./backend/esignet-mock && docker compose down
+          docker compose -f ./backend/docker-compose.yml down || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml down || true
 
   # Frontend Build (Voters & Admin)
   frontend-ci:
@@ -138,7 +138,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+
+      - name: Download Voters Build
+        uses: actions/download-artifact@v4
+        with:
+          name: voters-interface-build
+          path: ./frontend/voters_interface/dist
 
       - name: Start eSignet Mock Services
         working-directory: ./backend/esignet-mock
@@ -158,9 +163,16 @@ jobs:
             sleep 5
           done'
 
-      - name: Setup Playwright
+      - name: Start Frontend Preview Server
+        working-directory: ./frontend/voters_interface
+        shell: bash
         run: |
           npm ci
+          npx vite preview --port 5173 --host &
+
+      - name: Setup Playwright
+        run: |
+          npm install
           npx playwright install --with-deps
 
       - name: Run E2E Flows
@@ -179,5 +191,5 @@ jobs:
       - name: Stop Services
         if: always()
         run: |
-          cd ./backend && docker compose down
-          cd ./backend/esignet-mock && docker compose down
+          docker compose -f ./backend/docker-compose.yml down || true
+          docker compose -f ./backend/esignet-mock/docker-compose.yml down || true
