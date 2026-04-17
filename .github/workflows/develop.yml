@@ -31,14 +31,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: './backend/package-lock.json'
-
-      - name: Build Shared Packages
-        working-directory: ./backend
-        run: |
-          npm install
-          npm run build --workspaces --if-present
 
       - name: Start eSignet Mock Services
         working-directory: ./backend/esignet-mock
@@ -101,19 +93,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: './frontend/voters_interface/package-lock.json'
 
       - name: Build Voters Interface
         working-directory: ./frontend/voters_interface
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: Build Admin Dashboard
         working-directory: ./frontend/admin_dashboard
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: Upload Voters Build
@@ -167,7 +157,7 @@ jobs:
         working-directory: ./frontend/voters_interface
         shell: bash
         run: |
-          npm ci
+          npm install
           npx vite preview --port 5173 --host &
 
       - name: Setup Playwright
