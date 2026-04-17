@@ -8,12 +8,15 @@
 # For PRODUCTION: Replace placeholder values with actual secrets before deployment.
 # ============================================
 
-set -e
-
-# Wait for Vault to be ready
+# Wait for Vault to be ready (max 60s)
 echo "=== Waiting for Vault to be ready ==="
-until vault status >/dev/null 2>&1; do
-  echo "Vault is unavailable - sleeping"
+RETRIES=30
+for i in $(seq 1 $RETRIES); do
+  if wget -qO- http://vault:8200/v1/sys/health >/dev/null 2>&1; then
+    echo "Vault is ready!"
+    break
+  fi
+  echo "Vault is unavailable - attempt $i/$RETRIES"
   sleep 2
 done
 
