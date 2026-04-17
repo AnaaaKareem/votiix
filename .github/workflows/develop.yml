@@ -107,7 +107,7 @@ jobs:
       - name: Push Database Schema
         env:
           DATABASE_URL: postgresql://votiix:votiix_password@localhost:5432/ballot_db?schema=public
-        run: npx -y prisma db push --schema=backend/packages/db/prisma/schema.prisma --skip-generate --accept-data-loss
+        run: npx -y prisma@5.10.2 db push --schema=backend/packages/db/prisma/schema.prisma --accept-data-loss
 
       - name: Install Newman & Run Tests
         run: |
