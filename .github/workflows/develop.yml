@@ -16,16 +16,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v6
+        uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
             -Dsonar.projectKey=votiix
-            -Dsonar.sources=backend,frontend,hardware,tests
-            # Bypasses the ngrok landing page for the scanner
-            -Dsonar.scanner.metadataFilePath=.sonar/report-task.txt
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
