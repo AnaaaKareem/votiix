@@ -20,46 +20,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        with:
-          args: >
-            -Dsonar.projectKey=votiix
-
-  # Frontend Build (Voters & Admin)
-  frontend-ci:
-    name: Frontend Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Voters Interface
-        working-directory: ./frontend/voters_interface
-        run: |
-          npm install
-          npm run build
-
-      - name: Build Admin Dashboard
-        working-directory: ./frontend/admin_dashboard
-        run: |
-          npm install
-          npm run build
-
-      - name: Upload Voters Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: voters-interface-build
-          path: ./frontend/voters_interface/dist
-          retention-days: 14
-
-      - name: Upload Admin Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: admin-dashboard-build
-          path: ./frontend/admin_dashboard/dist
-          retention-days: 14
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
@@ -85,6 +45,10 @@ jobs:
       - name: Wait for Services to be Ready
         run: |
           echo "Waiting for Votiix Ecosystem..."
+
+          # eSignet: 302 redirect on swagger = service is up
+          # Mock Identity: no swagger, just check TCP port
+          # KrakenD: proxy health endpoints for all microservices
 
           for i in {1..48}; do
             echo "Attempt $i/48..."
@@ -143,37 +107,25 @@ jobs:
 
       - name: Push Database Schema
         env:
-          DATABASE_URL: postgresql://votiix:votiix_password@localhost:5432/ballot_db?schema=public
+          DATABASE_URL: postgresql://votiix:${{ secrets.DB_PASSWORD }}@localhost:5432/ballot_db?schema=public
         run: npx -y prisma@5.10.2 db push --schema=backend/packages/db/prisma/schema.prisma --accept-data-loss
 
-      - name: Install Newman & Run API Tests
+      - name: Install Newman & Run Tests
         continue-on-error: true
         run: |
           npm install -g newman newman-reporter-htmlextra
           mkdir -p reports/api-tests
           newman run tests/votiix-api.postman_collection.json \
-            -r cli,htmlextra,json \
-            --reporter-htmlextra-export reports/api-tests/votiix-api-report.html \
-            --reporter-json-export reports/api-tests/votiix-api-report.json
+            -r cli,htmlextra \
+            --reporter-htmlextra-export reports/api-tests/votiix-api-report.html
 
-      - name: Upload API Test Report
+      - name: Export API Test Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: api-integration-report
-          path: reports/api-tests/
-          retention-days: 30
+          path: reports/api-tests/votiix-api-report.html
 
-      - name: Upload Backend Config Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-config-snapshot
-          path: |
-            backend/krakend/krakend.json
-            backend/packages/db/prisma/schema.prisma
-            backend/docker-compose.yml
-          retention-days: 30
 
       - name: Download Voters Build
         uses: actions/download-artifact@v4
@@ -199,32 +151,16 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Run E2E Flows
-        continue-on-error: true
         run: npx playwright test --config=tests/playwright.config.ts
 
       - name: Upload E2E Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-report
+          name: e2e-report
           path: |
             playwright-report/
             test-results/
-          retention-days: 30
-
-      - name: Upload Docker Logs on Failure
-        if: failure()
-        run: |
-          mkdir -p reports/docker-logs
-          docker compose -f ./backend/docker-compose.yml logs > reports/docker-logs/backend-services.log 2>&1 || true
-          docker compose -f ./backend/esignet-mock/docker-compose.yml logs > reports/docker-logs/esignet-services.log 2>&1 || true
-
-      - name: Upload Docker Logs Artifact
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-logs
-          path: reports/docker-logs/
           retention-days: 14
 
       - name: Stop Services
@@ -232,3 +168,39 @@ jobs:
         run: |
           docker compose -f ./backend/docker-compose.yml down || true
           docker compose -f ./backend/esignet-mock/docker-compose.yml down || true
+
+  # Frontend Build (Voters & Admin)
+  frontend-ci:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Voters Interface
+        working-directory: ./frontend/voters_interface
+        run: |
+          npm install
+          npm run build
+
+      - name: Build Admin Dashboard
+        working-directory: ./frontend/admin_dashboard
+        run: |
+          npm install
+          npm run build
+
+      - name: Upload Voters Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: voters-interface-build
+          path: ./frontend/voters_interface/dist
+
+      - name: Upload Admin Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dashboard-build
+          path: ./frontend/admin_dashboard/dist
+
