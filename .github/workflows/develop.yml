@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
+        uses: sonarsource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -25,6 +25,7 @@ jobs:
             -Dsonar.projectKey=votiix
             -Dsonar.sources=backend,frontend,hardware,tests
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.cpd.exclusions=**/tests/**
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
