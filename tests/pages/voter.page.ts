@@ -41,16 +41,24 @@ export class VoterPage {
   }
 
   async selectLanguage(lang: 'English' | 'Arabic') {
-    await this.page.click(`button:has-text("${lang}")`);
+    if (lang === 'Arabic') {
+      // The Arabic button text is "العربية", not "Arabic"
+      await this.page.click('button:has-text("العربية")');
+    } else {
+      await this.page.click('button:has-text("English")');
+    }
   }
 
   async simulateFingerprintScan() {
-    // The scanner is a div/svg that is clickable
-    await this.page.click('.relative.z-10.w-36.h-36');
+    // The fingerprint scanner is a rounded div with specific classes
+    await this.page.click('.rounded-full.flex.items-center.justify-center.cursor-pointer');
   }
 
   async selectCandidate(id: string) {
-    await this.page.click(`div:has-text("${id}")`);
+    // The select-candidate page has an input field with placeholder "00"
+    // where the voter types the candidate number
+    const input = this.page.locator('input[placeholder="00"]');
+    await input.fill(id);
   }
 
   async confirmVote() {

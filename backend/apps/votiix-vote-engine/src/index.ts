@@ -165,7 +165,12 @@ async function main() {
   });
 
   app.listen(PORT, async () => {
-    await producer.connect();
+    try {
+      await producer.connect();
+      console.log('[Kafka] Producer connected.');
+    } catch (err: any) {
+      console.warn(`[Kafka] Producer connection failed (non-fatal): ${err.message}`);
+    }
     console.log(`votiix-vote-engine service listening on port ${PORT}`);
   });
 }

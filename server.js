@@ -11,19 +11,18 @@ const { Server } = require('socket.io');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
+    res.sendFile(path.join(__dirname, 'public/index.html'));
 });
-
 
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { 
+    cors: {
         origin: "*",
         methods: ["GET", "POST"]
-    } 
+    }
 });
 
 const pool = new Pool({
@@ -34,13 +33,67 @@ const pool = new Pool({
     port: process.env.DB_PORT,
 });
 
+// Initialize hardware-specific tables that don't exist in the Prisma schema.
+// These tables are used by the ESP32 hardware enrollment/voting flow.
+async function initHardwareTables() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(255) NOT NULL,
+                national_id VARCHAR(100) UNIQUE NOT NULL,
+                email VARCHAR(255),
+                phone VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS enrollment_requests (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                device_code VARCHAR(50) DEFAULT 'esp32-01',
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT NOW(),
+                completed_at TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS fingerprints (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                finger_id INTEGER NOT NULL,
+                sensor_model VARCHAR(50) DEFAULT 'R307',
+                enrolled_at TIMESTAMP DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS hw_candidates (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(255) NOT NULL,
+                keypad_number VARCHAR(10) UNIQUE NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS votes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                candidate_id INTEGER REFERENCES hw_candidates(id),
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(user_id)
+            );
+        `);
+        console.log('Hardware tables initialized successfully');
+    } catch (err) {
+        console.error('Failed to initialize hardware tables:', err.message);
+    }
+}
+
 pool.connect()
-    .then(() => console.log('Connected to PostgreSQL successfully'))
+    .then(async () => {
+        console.log('Connected to PostgreSQL successfully');
+        await initHardwareTables();
+    })
     .catch(err => console.error('Database connection error', err.stack));
 
 // --- Socket.IO Connection Listener ---
 io.on('connection', (socket) => {
-    console.log('💻 Web Dashboard connected to live feed!');
+    console.log('Web Dashboard connected to live feed!');
 });
 
 // ==========================================
@@ -70,39 +123,45 @@ app.post('/api/register', async (req, res) => {
         await pool.query(insertRequest, [userId, device_code]);
         await pool.query('COMMIT');
 
-        
         io.emit('live_update', { type: 'info', message: `Scanner activated for ${full_name}. Waiting for finger...` });
 
         res.status(200).json({ success: true, message: "User registered.", user_id: userId });
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await pool.query('ROLLBACK').catch(() => {});
+        console.error('Register error:', err.message);
         res.status(500).json({ error: "Database error during registration" });
     }
 });
+
+// ==========================================
+// 2. ESP32 API: Get Next Enrollment
+// ==========================================
 app.get('/enrollment/next', async (req, res) => {
     const device_code = req.query.device_code || 'esp32-01';
     try {
         const query = `
-            SELECT id AS request_id, user_id 
-            FROM enrollment_requests 
-            WHERE device_code = $1 AND status = 'pending' 
+            SELECT id AS request_id, user_id
+            FROM enrollment_requests
+            WHERE device_code = $1 AND status = 'pending'
             ORDER BY created_at ASC LIMIT 1;
         `;
         const result = await pool.query(query, [device_code]);
 
         if (result.rows.length > 0) {
-            res.status(200).json({ 
-                status: "success", 
-                request_id: result.rows[0].request_id, 
-                user_id: result.rows[0].user_id 
+            res.status(200).json({
+                status: "success",
+                request_id: result.rows[0].request_id,
+                user_id: result.rows[0].user_id
             });
         } else {
             res.status(200).json({ status: "empty" });
         }
     } catch (err) {
+        console.error('Enrollment next error:', err.message);
         res.status(500).json({ status: "error" });
     }
 });
+
 // ==========================================
 // 3. ESP32 API: Complete Enrollment
 // ==========================================
@@ -116,12 +175,12 @@ app.post('/enrollment/complete', async (req, res) => {
         await pool.query(updateRequest, [request_id]);
         await pool.query('COMMIT');
 
-        // Broadcast to Dashboard!
-        io.emit('live_update', { type: 'success', message: `✅ Fingerprint successfully saved for User ID ${user_id}!` });
+        io.emit('live_update', { type: 'success', message: `Fingerprint successfully saved for User ID ${user_id}!` });
 
         res.status(200).json({ success: true, message: "Enrollment fully completed" });
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await pool.query('ROLLBACK').catch(() => {});
+        console.error('Enrollment complete error:', err.message);
         res.status(500).json({ error: "Failed to save fingerprint" });
     }
 });
@@ -131,18 +190,17 @@ app.post('/enrollment/complete', async (req, res) => {
 // ==========================================
 app.post('/verify-fingerprint', async (req, res) => {
     const { finger_id } = req.body;
-    if (!finger_id) return res.status(400).json({ error: "Missing finger_id" });
+    if (!finger_id && finger_id !== 0) return res.status(400).json({ error: "Missing finger_id" });
 
     try {
         const query = `
-            SELECT u.id, u.full_name, u.national_id, u.email 
+            SELECT u.id, u.full_name, u.national_id, u.email
             FROM users u JOIN fingerprints f ON u.id = f.user_id WHERE f.finger_id = $1;
         `;
         const result = await pool.query(query, [finger_id]);
 
         if (result.rows.length === 0) {
-            // Broadcast Failed Scan!
-            io.emit('live_update', { type: 'error', message: `❌ Unknown fingerprint detected (ID: ${finger_id})` });
+            io.emit('live_update', { type: 'error', message: `Unknown fingerprint detected (ID: ${finger_id})` });
             return res.status(404).json({ success: false, message: "Fingerprint not found." });
         }
 
@@ -150,15 +208,19 @@ app.post('/verify-fingerprint', async (req, res) => {
 
         io.emit('live_update', {
             type: 'verify',
-            message: `🟢 Verified: ${user.full_name} has scanned in.`,
+            message: `Verified: ${user.full_name} has scanned in.`,
             user: user
         });
         res.status(200).json({ success: true, message: "User verified", user });
     } catch (err) {
+        console.error('Verify fingerprint error:', err.message);
         res.status(500).json({ error: "Database error during verification" });
     }
 });
 
+// ==========================================
+// 5. Keypad Vote
+// ==========================================
 app.post('/api/vote', async (req, res) => {
     const { user_id, keypad_selection } = req.body;
 
@@ -168,7 +230,7 @@ app.post('/api/vote', async (req, res) => {
 
     try {
         const candidateRes = await pool.query(
-            'SELECT id, full_name FROM candidates WHERE keypad_number = $1', 
+            'SELECT id, full_name FROM hw_candidates WHERE keypad_number = $1',
             [keypad_selection]
         );
 
@@ -184,36 +246,42 @@ app.post('/api/vote', async (req, res) => {
             [user_id, candidateId]
         );
 
-        io.emit('live_update', { 
-            type: 'success', 
-            message: `🗳️ Vote cast successfully for ${candidateName}!` 
+        io.emit('live_update', {
+            type: 'success',
+            message: `Vote cast successfully for ${candidateName}!`
         });
 
         res.status(200).json({ success: true, message: `Vote recorded for ${candidateName}` });
 
     } catch (err) {
-        if (err.code === '23505') { 
-            io.emit('live_update', { type: 'error', message: `❌ User ID ${user_id} already voted!` });
+        if (err.code === '23505') {
+            io.emit('live_update', { type: 'error', message: `User ID ${user_id} already voted!` });
             return res.status(400).json({ error: "You have already voted!" });
         }
-        console.error(err);
+        console.error('Vote error:', err.message);
         res.status(500).json({ error: "Database error during voting" });
     }
 });
 
-// 6. API to get all candidates for your website display
+// ==========================================
+// 6. Get Candidates
+// ==========================================
 app.get('/api/candidates', async (req, res) => {
     try {
-        const result = await pool.query('SELECT keypad_number, full_name FROM candidates ORDER BY keypad_number ASC');
+        const result = await pool.query('SELECT keypad_number, full_name FROM hw_candidates ORDER BY keypad_number ASC');
         res.status(200).json(result.rows);
     } catch (err) {
+        console.error('Get candidates error:', err.message);
         res.status(500).json({ error: "Failed to fetch candidates" });
     }
 });
+
+// ==========================================
+// 7. Keypad Input (Socket broadcast)
+// ==========================================
 app.post('/api/keypad', (req, res) => {
     const { key } = req.body;
     if (key) {
-        // Broadcast the key to any open HTML page
         io.emit('keypad_live', { key: String(key) });
         res.status(200).json({ success: true });
     } else {
@@ -223,5 +291,5 @@ app.post('/api/keypad', (req, res) => {
 
 const PORT = process.env.PORT || 3007;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Hardware server running on port ${PORT}`);
 });

@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import { z } from 'zod';
 import Redis from 'ioredis';
 import { PrismaClient } from '@votiix/db';
@@ -7,6 +8,22 @@ import { Kafka } from 'kafkajs';
 import { Client as MinioClient } from 'minio';
 import multer from 'multer';
 import { loadSecretsFromVault } from '@votiix/utils';
+
+// UUID v4 regex for parameter validation
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(id: string): boolean {
+  return UUID_REGEX.test(id);
+}
+
+function generateRsaKeyPair(): { publicKey: string; privateKey: string } {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  return { publicKey, privateKey };
+}
 
 async function main() {
   // Step 1: Load secrets from Vault into process.env
@@ -18,6 +35,8 @@ async function main() {
 
   const prisma = new PrismaClient();
   const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+  redis.on('error', (err) => console.warn('[Redis] Connection error (non-fatal):', err.message));
+
   const upload = multer({ storage: multer.memoryStorage() });
 
   const kafka = new Kafka({
@@ -25,6 +44,20 @@ async function main() {
     brokers: [process.env.KAFKA_BROKER || 'kafka:29092'],
   });
   const producer = kafka.producer();
+  let producerConnected = false;
+
+  // Best-effort Kafka publish — never let Kafka failures crash API requests
+  async function publishEvent(topic: string, message: object): Promise<void> {
+    if (!producerConnected) return;
+    try {
+      await producer.send({
+        topic,
+        messages: [{ value: JSON.stringify(message) }],
+      });
+    } catch (err: any) {
+      console.warn(`[Kafka] Failed to publish to ${topic}: ${err.message}`);
+    }
+  }
 
   // MinIO Client
   const minioClient = new MinioClient({
@@ -41,7 +74,6 @@ async function main() {
     const exists = await minioClient.bucketExists(MINIO_BUCKET);
     if (!exists) {
       await minioClient.makeBucket(MINIO_BUCKET);
-      // Set bucket policy to public-read for serving images
       const policy = JSON.stringify({
         Version: '2012-10-17',
         Statement: [{
@@ -58,8 +90,14 @@ async function main() {
   app.use(express.json());
   app.use(cors());
 
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', service: 'votiix-core' });
+  app.get('/health', async (_req: Request, res: Response) => {
+    try {
+      // Validate database connectivity beyond just "service is up"
+      await prisma.$queryRaw`SELECT 1`;
+      res.json({ status: 'ok', service: 'votiix-core', db: 'connected' });
+    } catch {
+      res.json({ status: 'ok', service: 'votiix-core', db: 'disconnected' });
+    }
   });
 
   // ============ ELECTION MANAGEMENT ============
@@ -74,6 +112,7 @@ async function main() {
 
   /**
    * POST /elections — Create a new election
+   * Auto-generates RSA-2048 keypair if none provided.
    */
   app.post('/elections', async (req: Request, res: Response) => {
     const schema = z.object({
@@ -88,14 +127,23 @@ async function main() {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     try {
+      // Auto-generate RSA keypair if not provided
+      let rsaPublicKey = parsed.data.rsa_public_key || null;
+      let rsaPrivateKey = parsed.data.rsa_private_key || null;
+      if (!rsaPublicKey || !rsaPrivateKey) {
+        const keys = generateRsaKeyPair();
+        rsaPublicKey = keys.publicKey;
+        rsaPrivateKey = keys.privateKey;
+      }
+
       const election = await prisma.election.create({
         data: {
           title: parsed.data.title,
           startDate: new Date(parsed.data.start_date),
           endDate: new Date(parsed.data.end_date),
           status: 'Draft',
-          rsaPublicKey: parsed.data.rsa_public_key || null,
-          rsaPrivateKey: parsed.data.rsa_private_key || null,
+          rsaPublicKey,
+          rsaPrivateKey,
         },
       });
       res.status(201).json(election);
@@ -115,6 +163,7 @@ async function main() {
       });
       res.json(elections);
     } catch (error) {
+      console.error('List elections error:', error);
       res.status(500).json({ error: 'Failed to fetch elections' });
     }
   });
@@ -141,6 +190,7 @@ async function main() {
       }
       res.json(election);
     } catch (error) {
+      console.error('Active election error:', error);
       res.status(500).json({ error: 'Failed to fetch active election' });
     }
   });
@@ -149,6 +199,9 @@ async function main() {
    * GET /elections/:id — Get single election by ID
    */
   app.get('/elections/:id', async (req: Request, res: Response) => {
+    if (!isValidUuid(req.params.id)) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
     try {
       const election = await prisma.election.findUnique({
         where: { id: req.params.id },
@@ -168,6 +221,7 @@ async function main() {
       }
       res.json(election);
     } catch (error) {
+      console.error('Get election error:', error);
       res.status(500).json({ error: 'Failed to fetch election' });
     }
   });
@@ -178,6 +232,9 @@ async function main() {
    */
   app.post('/elections/:id/transition', async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!isValidUuid(id)) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
     const { target_status } = req.body;
 
     try {
@@ -197,17 +254,12 @@ async function main() {
         data: { status: target_status },
       });
 
-      // Publish election.update to Kafka
-      await producer.send({
-        topic: 'election.update',
-        messages: [{
-          value: JSON.stringify({
-            election_id: id,
-            previous_status: election.status,
-            new_status: target_status,
-            timestamp: new Date().toISOString(),
-          }),
-        }],
+      // Best-effort publish
+      await publishEvent('election.update', {
+        election_id: id,
+        previous_status: election.status,
+        new_status: target_status,
+        timestamp: new Date().toISOString(),
       });
 
       res.json(updated);
@@ -218,11 +270,14 @@ async function main() {
   });
 
   /**
-   * POST /elections/:id/purge — Danger Zone: Wipe esp32_finger_id references
+   * POST /elections/:id/purge — Danger Zone: Wipe voter data
    * Body: { "confirmation": "ARCHIVE" }
    */
   app.post('/elections/:id/purge', async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!isValidUuid(id)) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
     const { confirmation } = req.body;
 
     if (confirmation !== 'ARCHIVE') {
@@ -233,36 +288,27 @@ async function main() {
       const election = await prisma.election.findUnique({ where: { id } });
       if (!election) return res.status(404).json({ error: 'Election not found' });
 
-      // Only allow purge for Archived elections
       if (election.status !== 'Archived') {
-        return res.status(400).json({ 
-          error: 'Election must be in "Archived" status before purging' 
+        return res.status(400).json({
+          error: 'Election must be in "Archived" status before purging'
         });
       }
 
-      // Delete voter registry entries for this election (GDPR-style)
       const deleted = await prisma.voterRegistry.deleteMany({
         where: { electionId: id },
       });
 
-      // Update election status
       await prisma.election.update({
         where: { id },
         data: { status: 'Purged' },
       });
 
-      // Publish to Kafka for audit logging
-      await producer.send({
-        topic: 'election.update',
-        messages: [{
-          value: JSON.stringify({
-            election_id: id,
-            action: 'WIPE_DATA',
-            confirmation: 'ARCHIVE',
-            records_purged: deleted.count,
-            timestamp: new Date().toISOString(),
-          }),
-        }],
+      await publishEvent('election.update', {
+        election_id: id,
+        action: 'WIPE_DATA',
+        confirmation: 'ARCHIVE',
+        records_purged: deleted.count,
+        timestamp: new Date().toISOString(),
       });
 
       res.json({ purged: true, records_deleted: deleted.count });
@@ -278,6 +324,9 @@ async function main() {
    * POST /elections/:id/voters — Register a voter for an election
    */
   app.post('/elections/:id/voters', async (req: Request, res: Response) => {
+    if (!isValidUuid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid election ID' });
+    }
     const schema = z.object({
       mosip_uin: z.string().min(1),
       fingerprint_id: z.number().int().min(0).max(127),
@@ -322,6 +371,7 @@ async function main() {
       });
       res.json(voters);
     } catch (error) {
+      console.error('List voters error:', error);
       res.status(500).json({ error: 'Failed to fetch voters' });
     }
   });
@@ -371,6 +421,7 @@ async function main() {
       });
       res.json(stations);
     } catch (error) {
+      console.error('List stations error:', error);
       res.status(500).json({ error: 'Failed to fetch polling stations' });
     }
   });
@@ -379,7 +430,6 @@ async function main() {
 
   /**
    * POST /parties — Create party with logo upload
-   * Accepts multipart/form-data with fields: name, short_code, logo (file)
    */
   app.post('/parties', upload.single('logo'), async (req: Request, res: Response) => {
     const { name, short_code } = req.body;
@@ -412,8 +462,13 @@ async function main() {
    * GET /parties — List all parties
    */
   app.get('/parties', async (_req: Request, res: Response) => {
-    const parties = await prisma.party.findMany({ include: { candidates: true } });
-    res.json(parties);
+    try {
+      const parties = await prisma.party.findMany({ include: { candidates: true } });
+      res.json(parties);
+    } catch (error) {
+      console.error('List parties error:', error);
+      res.status(500).json({ error: 'Failed to fetch parties' });
+    }
   });
 
   // ============ CONTEST & CANDIDATE MANAGEMENT ============
@@ -422,6 +477,9 @@ async function main() {
    * POST /elections/:id/contests — Create a contest for an election
    */
   app.post('/elections/:id/contests', async (req: Request, res: Response) => {
+    if (!isValidUuid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid election ID' });
+    }
     const schema = z.object({
       office_title: z.string(),
       seats_available: z.number().int().min(1).default(1),
@@ -440,6 +498,7 @@ async function main() {
       });
       res.status(201).json(contest);
     } catch (error) {
+      console.error('Create contest error:', error);
       res.status(500).json({ error: 'Failed to create contest' });
     }
   });
@@ -448,16 +507,20 @@ async function main() {
    * GET /elections/:id/contests — List contests for an election
    */
   app.get('/elections/:id/contests', async (req: Request, res: Response) => {
-    const contests = await prisma.contest.findMany({
-      where: { electionId: req.params.id },
-      include: { candidates: { include: { party: true } } },
-    });
-    res.json(contests);
+    try {
+      const contests = await prisma.contest.findMany({
+        where: { electionId: req.params.id },
+        include: { candidates: { include: { party: true } } },
+      });
+      res.json(contests);
+    } catch (error) {
+      console.error('List contests error:', error);
+      res.status(500).json({ error: 'Failed to fetch contests' });
+    }
   });
 
   /**
    * POST /contests/:id/candidates — Add candidate with photo upload
-   * Accepts multipart/form-data with: name, party_id (optional), list_position, photo (file)
    */
   app.post('/contests/:id/candidates', upload.single('photo'), async (req: Request, res: Response) => {
     const { name, party_id, list_position } = req.body;
@@ -502,6 +565,7 @@ async function main() {
       });
       res.json(candidates);
     } catch (error) {
+      console.error('List candidates error:', error);
       res.status(500).json({ error: 'Failed to fetch candidates' });
     }
   });
@@ -510,21 +574,23 @@ async function main() {
 
   /**
    * GET /elections/:id/results — Read from Redis, fallback to DB
-   * This endpoint is used by the Live Dashboard (polled every 5 seconds).
-   * Uses live VotePackage counts for Active elections.
-   * Uses TallyResult for finalized elections (Tallying/Closed/Archived).
-   * Includes winner determination when election is Closed/Tallying/Archived.
    */
   app.get('/elections/:id/results', async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!isValidUuid(id)) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
     try {
       // Try Redis cache first
-      const cached = await redis.get(`election:${id}:results`);
-      if (cached) {
-        return res.json(JSON.parse(cached));
+      try {
+        const cached = await redis.get(`election:${id}:results`);
+        if (cached) {
+          return res.json(JSON.parse(cached));
+        }
+      } catch {
+        // Redis unavailable — fall through to DB
       }
 
-      // Get election status
       const election = await prisma.election.findUnique({
         where: { id },
         select: { status: true, endDate: true, title: true },
@@ -534,10 +600,8 @@ async function main() {
         return res.status(404).json({ error: 'Election not found' });
       }
 
-      // Check if deadline has passed for automatic closure
       const deadlinePassed = new Date() > new Date(election.endDate);
 
-      // Aggregate from DB
       const contests = await prisma.contest.findMany({
         where: { electionId: id },
         include: {
@@ -550,14 +614,12 @@ async function main() {
         },
       });
 
-      // Fetch all committed VotePackages for this election in one query (live counting)
       const allContestIds = contests.map((c: any) => c.id);
       const allVotePackages = await prisma.votePackage.findMany({
         where: { contestId: { in: allContestIds } },
         select: { contestId: true, selections: true },
       });
 
-      // Build live vote count map: contestId -> candidateId -> count
       const liveVoteCounts: Record<string, Record<string, number>> = {};
       for (const vp of allVotePackages) {
         if (!liveVoteCounts[vp.contestId]) liveVoteCounts[vp.contestId] = {};
@@ -567,17 +629,13 @@ async function main() {
         }
       }
 
-      // Total committed votes across all contests
       const totalCommittedVotes = allVotePackages.length;
-
       const isFinalized = ['Closed', 'Tallying', 'Archived', 'Purged'].includes(election.status) || deadlinePassed;
 
       const results = contests.map((c: any) => {
         const contestLiveCounts = liveVoteCounts[c.id] || {};
 
         const candidatesWithVotes = c.candidates.map((cand: any) => {
-          // For finalized elections prefer TallyResult (authoritative),
-          // for Active elections use live VotePackage count.
           const liveCount = contestLiveCounts[cand.id] || 0;
           const tallyCount = cand.tallyResult?.voteCount ?? null;
           const vote_count = isFinalized && tallyCount !== null ? tallyCount : liveCount;
@@ -594,10 +652,8 @@ async function main() {
           };
         });
 
-        // Sort by vote count descending
         candidatesWithVotes.sort((a: any, b: any) => b.vote_count - a.vote_count);
 
-        // Determine winner if election is closed/tallying/archived
         let winner = null;
         if (isFinalized && candidatesWithVotes.length > 0) {
           const topCandidate = candidatesWithVotes[0];
@@ -631,8 +687,12 @@ async function main() {
         contests: results,
       };
 
-      // Cache for 5 seconds (matches live dashboard poll interval)
-      await redis.set(`election:${id}:results`, JSON.stringify(response), 'EX', 5);
+      // Best-effort cache
+      try {
+        await redis.set(`election:${id}:results`, JSON.stringify(response), 'EX', 5);
+      } catch {
+        // Redis unavailable — skip caching
+      }
       res.json(response);
     } catch (error) {
       console.error('Results fetch error:', error);
@@ -642,10 +702,12 @@ async function main() {
 
   /**
    * GET /elections/:id/committed-votes — Quick stats: total committed votes
-   * Used by the live dashboard header/ticker. Not cached (always fresh).
    */
   app.get('/elections/:id/committed-votes', async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!isValidUuid(id)) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
     try {
       const election = await prisma.election.findUnique({
         where: { id },
@@ -663,7 +725,6 @@ async function main() {
         where: { contestId: { in: contestIds } },
       });
 
-      // Per-contest breakdown
       const breakdown = await Promise.all(
         contests.map(async (c: any) => {
           const count = await prisma.votePackage.count({ where: { contestId: c.id } });
@@ -687,11 +748,12 @@ async function main() {
 
   /**
    * GET /elections/:id/vote/:tx_hash — Verify a specific vote exists
-   * Voters can use this with their WhatsApp receipt to confirm their vote was counted.
-   * Returns minimal info only (anonymous — no candidate info exposed).
    */
   app.get('/elections/:id/vote/:tx_hash', async (req: Request, res: Response) => {
     const { id, tx_hash } = req.params;
+    if (!isValidUuid(id)) {
+      return res.status(404).json({ error: 'Vote not found for this election' });
+    }
     try {
       const votePackage = await prisma.votePackage.findUnique({
         where: { txHash: tx_hash },
@@ -733,6 +795,9 @@ async function main() {
    */
   app.post('/elections/:id/tally', async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!isValidUuid(id)) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
     try {
       const election = await prisma.election.findUnique({ where: { id } });
       if (!election) {
@@ -742,7 +807,6 @@ async function main() {
         return res.status(400).json({ error: 'Election must be in "Tallying" status' });
       }
 
-      // Get all contests for this election
       const contests = await prisma.contest.findMany({
         where: { electionId: id },
         include: { candidates: true },
@@ -750,8 +814,6 @@ async function main() {
 
       for (const contest of contests) {
         for (const candidate of contest.candidates) {
-          // Count votes for this candidate from VotePackage
-          // Note: selections is a JSON array of candidate IDs
           const votes = await prisma.votePackage.findMany({
             where: { contestId: contest.id },
           });
@@ -764,7 +826,6 @@ async function main() {
             }
           }
 
-          // Upsert TallyResult
           await prisma.tallyResult.upsert({
             where: { candidateId: candidate.id },
             create: {
@@ -778,8 +839,12 @@ async function main() {
         }
       }
 
-      // Invalidate Redis cache
-      await redis.del(`election:${id}:results`);
+      // Best-effort cache invalidation
+      try {
+        await redis.del(`election:${id}:results`);
+      } catch {
+        // Redis unavailable
+      }
 
       res.json({ status: 'Tallying complete', election_id: id });
     } catch (error) {
@@ -794,8 +859,22 @@ async function main() {
   });
 
   app.listen(PORT, async () => {
-    await producer.connect();
-    await ensureBucket();
+    // Connect to Kafka and MinIO with resilience — don't crash the server
+    try {
+      await producer.connect();
+      producerConnected = true;
+      console.log('[Kafka] Producer connected.');
+    } catch (err: any) {
+      console.warn(`[Kafka] Producer connection failed (non-fatal): ${err.message}`);
+    }
+
+    try {
+      await ensureBucket();
+      console.log('[MinIO] Bucket ready.');
+    } catch (err: any) {
+      console.warn(`[MinIO] Bucket init failed (non-fatal): ${err.message}`);
+    }
+
     console.log(`votiix-core service listening on port ${PORT}`);
   });
 }
