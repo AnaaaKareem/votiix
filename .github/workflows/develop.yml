@@ -23,6 +23,8 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=votiix
+            -Dsonar.sources=backend,frontend,hardware,tests
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
