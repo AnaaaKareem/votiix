@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v5
+        uses: sonarsource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -24,8 +24,8 @@ jobs:
           args: >
             -Dsonar.projectKey=votiix
             -Dsonar.sources=backend,frontend,hardware,tests
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.cpd.exclusions=**/tests/**
+            # Bypasses the ngrok landing page for the scanner
+            -Dsonar.scanner.metadataFilePath=.sonar/report-task.txt
 
   # Backend CI & API Integration (The Dynamic Runner)
   backend-integration:
