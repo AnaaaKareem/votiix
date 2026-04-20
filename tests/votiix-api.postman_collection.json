@@ -1,0 +1,596 @@
+{
+	"info": {
+		"_postman_id": "votiix-api-collection-2024",
+		"name": "Votiix API Test Collection",
+		"description": "Comprehensive API tests for Votiix voting system - 92 test cases covering all KrakenD gateway endpoints including voting pipeline, hardware, and vote verification.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{"key": "base_url", "value": "http://localhost:8080", "type": "string"},
+		{"key": "election_id", "value": "", "type": "string"},
+		{"key": "contest_id", "value": "", "type": "string"},
+		{"key": "party_id", "value": "", "type": "string"},
+		{"key": "candidate_id", "value": "", "type": "string"},
+		{"key": "auth_jwt", "value": "", "type": "string"},
+		{"key": "session_id", "value": "", "type": "string"},
+		{"key": "signed_blinded_token", "value": "", "type": "string"},
+		{"key": "hw_user_id", "value": "", "type": "string"}
+	],
+	"item": [
+		{
+			"name": "1. Health Checks",
+			"item": [
+				{
+					"name": "TC-H01: Health Check - Core Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Service healthy', () => { const j = pm.response.json(); pm.expect(j.status).to.eql('ok'); pm.expect(j.service).to.eql('votiix-core'); });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/core", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "core"]}}
+				},
+				{
+					"name": "TC-H02: Health Check - IoT Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/iot", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "iot"]}}
+				},
+				{
+					"name": "TC-H03: Health Check - Observer Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/observer", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "observer"]}}
+				},
+				{
+					"name": "TC-H04: Health Check - Messenger Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/messenger", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "messenger"]}}
+				},
+				{
+					"name": "TC-H05: Health Check - Identity Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/identity", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "identity"]}}
+				}
+			]
+		},
+		{
+			"name": "2. Elections Management",
+			"item": [
+				{
+					"name": "TC-E01: Create Election - Valid Data",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Election created', () => { const j = pm.response.json(); pm.expect(j.title).to.eql('Test Election 2024'); pm.expect(j.status).to.eql('Draft'); pm.collectionVariables.set('election_id', j.id); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"title\": \"Test Election 2024\", \"start_date\": \"2024-12-01T00:00:00Z\", \"end_date\": \"2024-12-31T23:59:59Z\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections"]}}
+				},
+				{
+					"name": "TC-E02: Create Election - Missing Title",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Error returned', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"start_date\": \"2024-12-01T00:00:00Z\", \"end_date\": \"2024-12-31T23:59:59Z\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections"]}}
+				},
+				{
+					"name": "TC-E03: List Elections",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array returned', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections"]}}
+				},
+				{
+					"name": "TC-E04: Get Single Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Election returned', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('election_id')));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}"]}}
+				},
+				{
+					"name": "TC-E05: Get Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections/00000000-0000-0000-0000-000000000000", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "00000000-0000-0000-0000-000000000000"]}}
+				},
+				{
+					"name": "TC-E06: Transition Draft to Active",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Status is Active', () => pm.expect(pm.response.json().status).to.eql('Active'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"target_status\": \"Active\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/transition", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "transition"]}}
+				},
+				{
+					"name": "TC-E07: Invalid Transition - Skip Status",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Invalid transition', () => pm.expect(pm.response.json().error).to.include('Invalid transition'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"target_status\": \"Archived\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/transition", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "transition"]}}
+				},
+				{
+					"name": "TC-E08: Get Active Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Active election', () => pm.expect(pm.response.json().status).to.eql('Active'));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/active", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "active"]}}
+				}
+			]
+		},
+		{
+			"name": "3. Parties Management",
+			"item": [
+				{
+					"name": "TC-P01: Create Party - Valid Data",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Party created', () => { const j = pm.response.json(); pm.expect(j.name).to.eql('Freedom Party'); pm.collectionVariables.set('party_id', j.id); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "name", "value": "Freedom Party", "type": "text"}, {"key": "short_code", "value": "FP", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/parties", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "parties"]}}
+				},
+				{
+					"name": "TC-P02: Create Party - Missing Name",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "short_code", "value": "XX", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/parties", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "parties"]}}
+				},
+				{
+					"name": "TC-P03: Create Party - Missing Short Code",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "name", "value": "Test Party", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/parties", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "parties"]}}
+				},
+				{
+					"name": "TC-P04: List Parties",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array returned', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/parties", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "parties"]}}
+				},
+				{
+					"name": "TC-P05: Create Second Party",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "name", "value": "Unity Coalition", "type": "text"}, {"key": "short_code", "value": "UC", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/parties", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "parties"]}}
+				}
+			]
+		},
+		{
+			"name": "4. Contests Management",
+			"item": [
+				{
+					"name": "TC-C01: Create Contest - Valid Data",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Contest created', () => { const j = pm.response.json(); pm.expect(j.officeTitle).to.eql('President'); pm.collectionVariables.set('contest_id', j.id); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"office_title\": \"President\", \"seats_available\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/contests", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "contests"]}}
+				},
+				{
+					"name": "TC-C02: Create Contest - Multiple Seats",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('5 seats', () => pm.expect(pm.response.json().seatsAvailable).to.eql(5));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"office_title\": \"Senate\", \"seats_available\": 5}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/contests", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "contests"]}}
+				},
+				{
+					"name": "TC-C03: List Contests",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array with contests', () => pm.expect(pm.response.json().length).to.be.greaterThan(0));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/contests", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "contests"]}}
+				},
+				{
+					"name": "TC-C04: List Contests - Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Empty array', () => pm.expect(pm.response.json().length).to.eql(0));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections/00000000-0000-0000-0000-000000000000/contests", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "00000000-0000-0000-0000-000000000000", "contests"]}}
+				},
+				{
+					"name": "TC-C05: Create Contest - Missing Title",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"seats_available\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/contests", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "contests"]}}
+				}
+			]
+		},
+		{
+			"name": "5. Candidates Management",
+			"item": [
+				{
+					"name": "TC-CD01: Add Candidate - Valid Data",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Candidate created', () => { const j = pm.response.json(); pm.expect(j.name).to.eql('John Candidate'); pm.collectionVariables.set('candidate_id', j.id); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "name", "value": "John Candidate", "type": "text"}, {"key": "party_id", "value": "{{party_id}}", "type": "text"}, {"key": "list_position", "value": "1", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/contests/{{contest_id}}/candidates", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "contests", "{{contest_id}}", "candidates"]}}
+				},
+				{
+					"name": "TC-CD02: Add Independent Candidate",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Independent', () => pm.expect(pm.response.json().partyId).to.be.null);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "name", "value": "Jane Independent", "type": "text"}, {"key": "list_position", "value": "2", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/contests/{{contest_id}}/candidates", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "contests", "{{contest_id}}", "candidates"]}}
+				},
+				{
+					"name": "TC-CD03: Add Candidate - Missing Name",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "list_position", "value": "3", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/contests/{{contest_id}}/candidates", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "contests", "{{contest_id}}", "candidates"]}}
+				},
+				{
+					"name": "TC-CD04: List Candidates",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Has candidates', () => pm.expect(pm.response.json().length).to.be.greaterThan(0));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/contests/{{contest_id}}/candidates", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "contests", "{{contest_id}}", "candidates"]}}
+				},
+				{
+					"name": "TC-CD05: Add Third Candidate",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "body": {"mode": "formdata", "formdata": [{"key": "name", "value": "Bob Smith", "type": "text"}, {"key": "list_position", "value": "3", "type": "text"}]}, "url": {"raw": "{{base_url}}/api/v1/admin/contests/{{contest_id}}/candidates", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "contests", "{{contest_id}}", "candidates"]}}
+				}
+			]
+		},
+		{
+			"name": "6. Polling Stations",
+			"item": [
+				{
+					"name": "TC-PS01: Create Station - Valid",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Capacity 10', () => pm.expect(pm.response.json().terminalCapacity).to.eql(10));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"name\": \"Central Polling Station\", \"address\": \"123 Main Street\", \"terminal_capacity\": 10}"}, "url": {"raw": "{{base_url}}/api/v1/admin/stations", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "stations"]}}
+				},
+				{
+					"name": "TC-PS02: Create Station - Missing Name",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"address\": \"123 Main Street\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/stations", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "stations"]}}
+				},
+				{
+					"name": "TC-PS03: List Stations",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/stations", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "stations"]}}
+				},
+				{
+					"name": "TC-PS04: Create Station - Default Capacity",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Default 5', () => pm.expect(pm.response.json().terminalCapacity).to.eql(5));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"name\": \"North District Station\", \"address\": \"456 North Ave\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/stations", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "stations"]}}
+				},
+				{
+					"name": "TC-PS05: Create Large Station",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Capacity 50', () => pm.expect(pm.response.json().terminalCapacity).to.eql(50));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"name\": \"Convention Center\", \"address\": \"789 Event Blvd\", \"terminal_capacity\": 50}"}, "url": {"raw": "{{base_url}}/api/v1/admin/stations", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "stations"]}}
+				}
+			]
+		},
+		{
+			"name": "7. Voter Registry",
+			"item": [
+				{
+					"name": "TC-VR01: Register Voter - Valid",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));", "pm.test('Not voted', () => pm.expect(pm.response.json().hasVoted).to.be.false);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"mosip_uin\": \"UIN-TEST-001\", \"fingerprint_id\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
+				},
+				{
+					"name": "TC-VR02: Register Duplicate UIN",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 409', () => pm.response.to.have.status(409));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"mosip_uin\": \"UIN-TEST-001\", \"fingerprint_id\": 43}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
+				},
+				{
+					"name": "TC-VR03: Register Invalid Fingerprint",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"mosip_uin\": \"UIN-TEST-002\", \"fingerprint_id\": 128}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
+				},
+				{
+					"name": "TC-VR04: List Voters",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
+				},
+				{
+					"name": "TC-VR05: Register Second Voter",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"mosip_uin\": \"UIN-TEST-002\", \"fingerprint_id\": 43}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/voters", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "voters"]}}
+				}
+			]
+		},
+		{
+			"name": "8. IoT Terminals",
+			"item": [
+				{
+					"name": "TC-IOT01: Send Heartbeat",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"hardware_id\": \"esp32-terminal-01\", \"status\": \"Online\", \"firmware_version\": \"2.4.0\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/iot/heartbeat", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "iot", "heartbeat"]}}
+				},
+				{
+					"name": "TC-IOT02: Missing Hardware ID",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"status\": \"Online\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/iot/heartbeat", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "iot", "heartbeat"]}}
+				},
+				{
+					"name": "TC-IOT03: Get Terminals",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/terminals", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "terminals"]}}
+				},
+				{
+					"name": "TC-IOT04: Second Terminal",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"hardware_id\": \"esp32-terminal-02\", \"status\": \"Online\", \"firmware_version\": \"2.4.1\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/iot/heartbeat", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "iot", "heartbeat"]}}
+				},
+				{
+					"name": "TC-IOT05: Maintenance Status",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"hardware_id\": \"esp32-terminal-01\", \"status\": \"Maintenance\", \"firmware_version\": \"2.4.0\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/iot/heartbeat", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "iot", "heartbeat"]}}
+				}
+			]
+		},
+		{
+			"name": "9. Audit Logs",
+			"item": [
+				{
+					"name": "TC-A01: Get Audit Logs",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/audit/logs", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "audit", "logs"]}}
+				},
+				{
+					"name": "TC-A02: Logs with Limit",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/audit/logs?limit=10", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "audit", "logs"], "query": [{"key": "limit", "value": "10"}]}}
+				},
+				{
+					"name": "TC-A03: Logs by Action",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/audit/logs?action=ELECTION_STATUS_CHANGE", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "audit", "logs"], "query": [{"key": "action", "value": "ELECTION_STATUS_CHANGE"}]}}
+				},
+				{
+					"name": "TC-A04: Verify Chain",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/audit/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "audit", "verify"]}}
+				},
+				{
+					"name": "TC-A05: Paginated Logs",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/audit/logs?limit=5&skip=0", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "audit", "logs"], "query": [{"key": "limit", "value": "5"}, {"key": "skip", "value": "0"}]}}
+				}
+			]
+		},
+		{
+			"name": "10. Live Results",
+			"item": [
+				{
+					"name": "TC-R01: Get Results",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Has contests', () => pm.expect(pm.response.json().contests).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/results", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "results"]}}
+				},
+				{
+					"name": "TC-R02: Results Metadata",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Has metadata', () => { const j = pm.response.json(); pm.expect(j.election_id).to.not.be.undefined; pm.expect(j.deadline_passed).to.not.be.undefined; });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/results", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "results"]}}
+				},
+				{
+					"name": "TC-R03: Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/00000000-0000-0000-0000-000000000000/results", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "00000000-0000-0000-0000-000000000000", "results"]}}
+				},
+				{
+					"name": "TC-R04: Vote Counts",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/results", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "results"]}}
+				},
+				{
+					"name": "TC-R05: Cache Speed",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Fast response', () => pm.expect(pm.response.responseTime).to.be.below(1000));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/results", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "results"]}}
+				}
+			]
+		},
+		{
+			"name": "11. Data Purge",
+			"item": [
+				{
+					"name": "TC-DP01: Purge No Confirm",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('ARCHIVE required', () => pm.expect(pm.response.json().error).to.include('ARCHIVE'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"confirmation\": \"wrong\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/purge", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "purge"]}}
+				},
+				{
+					"name": "TC-DP02: Purge Non-Archived",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Must be archived', () => pm.expect(pm.response.json().error).to.include('Archived'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"confirmation\": \"ARCHIVE\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/purge", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "purge"]}}
+				},
+				{
+					"name": "TC-DP03: Purge Non-Existent",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"confirmation\": \"ARCHIVE\"}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/00000000-0000-0000-0000-000000000000/purge", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "00000000-0000-0000-0000-000000000000", "purge"]}}
+				}
+			]
+		},
+		{
+			"name": "12. Messenger",
+			"item": [
+				{
+					"name": "TC-M01: Send WhatsApp",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200 or 503', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"phone_number\": \"201234567890\", \"tx_hash\": \"abc123def456\", \"election_id\": \"{{election_id}}\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/messenger/whatsapp", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "messenger", "whatsapp"]}}
+				},
+				{
+					"name": "TC-M02: Missing Phone",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"tx_hash\": \"abc123def456\", \"election_id\": \"{{election_id}}\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/messenger/whatsapp", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "messenger", "whatsapp"]}}
+				},
+				{
+					"name": "TC-M03: Missing TX Hash",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"phone_number\": \"201234567890\", \"election_id\": \"{{election_id}}\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/messenger/whatsapp", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "messenger", "whatsapp"]}}
+				}
+			]
+		},
+		{
+			"name": "13. Kiosk Auth (Identity)",
+			"item": [
+				{
+					"name": "TC-KA01: Auth Session - Valid Fingerprint",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('JWT returned', () => { const j = pm.response.json(); pm.expect(j.jwt).to.not.be.undefined; pm.expect(j.session_id).to.not.be.undefined; pm.expect(j.expires_in_seconds).to.eql(60); pm.collectionVariables.set('auth_jwt', j.jwt); pm.collectionVariables.set('session_id', j.session_id); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"fingerprint_id\": 1, \"terminal_id\": \"esp32-terminal-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/identity/auth", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "identity", "auth"]}}
+				},
+				{
+					"name": "TC-KA02: Auth Session - Missing Fingerprint ID",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Error returned', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"terminal_id\": \"esp32-terminal-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/identity/auth", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "identity", "auth"]}}
+				},
+				{
+					"name": "TC-KA03: Auth Session - Missing Terminal ID",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"fingerprint_id\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/identity/auth", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "identity", "auth"]}}
+				},
+				{
+					"name": "TC-KA04: Auth Session - Invalid Fingerprint Range",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Validation error', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"fingerprint_id\": 200, \"terminal_id\": \"esp32-terminal-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/identity/auth", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "identity", "auth"]}}
+				},
+				{
+					"name": "TC-KA05: Auth Session - Unregistered Fingerprint",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 401 or 404', () => pm.expect(pm.response.code).to.be.oneOf([401, 404]));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"fingerprint_id\": 99, \"terminal_id\": \"esp32-terminal-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/identity/auth", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "identity", "auth"]}}
+				}
+			]
+		},
+		{
+			"name": "14. Token Signing",
+			"item": [
+				{
+					"name": "TC-TS01: Sign Token - Valid JWT & Blinded Token",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Signed token returned', () => { const j = pm.response.json(); pm.expect(j.signed_blinded_token).to.not.be.undefined; pm.expect(j.election_id).to.not.be.undefined; pm.collectionVariables.set('signed_blinded_token', j.signed_blinded_token); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"auth_session_jwt\": \"{{auth_jwt}}\", \"blinded_token\": \"random-blinded-token-value-12345\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/token/sign", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "sign"]}}
+				},
+				{
+					"name": "TC-TS02: Sign Token - Missing JWT",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Error returned', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"blinded_token\": \"random-token\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/token/sign", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "sign"]}}
+				},
+				{
+					"name": "TC-TS03: Sign Token - Missing Blinded Token",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"auth_session_jwt\": \"{{auth_jwt}}\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/token/sign", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "sign"]}}
+				},
+				{
+					"name": "TC-TS04: Sign Token - Expired JWT",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 401', () => pm.response.to.have.status(401));", "pm.test('JWT expired', () => pm.expect(pm.response.json().error).to.include('expired'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"auth_session_jwt\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtb3NpcF91aW4iOiJ0ZXN0IiwiZWxlY3Rpb25faWQiOiJ0ZXN0IiwiaWF0IjoxNjAwMDAwMDAwLCJleHAiOjE2MDAwMDAwNjB9.invalid\", \"blinded_token\": \"random-token\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/token/sign", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "sign"]}}
+				},
+				{
+					"name": "TC-TS05: Get Public Key - Valid Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Public key returned', () => { const j = pm.response.json(); pm.expect(j.public_key).to.not.be.undefined; pm.expect(j.election_id).to.not.be.undefined; });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/kiosk/token/public-key?election_id={{election_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "public-key"], "query": [{"key": "election_id", "value": "{{election_id}}"}]}}
+				},
+				{
+					"name": "TC-TS06: Get Public Key - Missing Election ID",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/kiosk/token/public-key", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "public-key"]}}
+				},
+				{
+					"name": "TC-TS07: Get Public Key - Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/kiosk/token/public-key?election_id=00000000-0000-0000-0000-000000000000", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "token", "public-key"], "query": [{"key": "election_id", "value": "00000000-0000-0000-0000-000000000000"}]}}
+				}
+			]
+		},
+		{
+			"name": "15. Vote Commitment",
+			"item": [
+				{
+					"name": "TC-VC01: Commit Vote - Missing Fields",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Validation error', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"contest_id\": \"{{contest_id}}\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/vote/commit", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "vote", "commit"]}}
+				},
+				{
+					"name": "TC-VC02: Commit Vote - Invalid Contest ID",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400 or 404', () => pm.expect(pm.response.code).to.be.oneOf([400, 404]));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"contest_id\": \"not-a-uuid\", \"selections\": [\"candidate-1\"], \"blind_token\": \"token\", \"blind_token_signature\": \"sig\", \"terminal_id\": \"esp32-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/vote/commit", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "vote", "commit"]}}
+				},
+				{
+					"name": "TC-VC03: Commit Vote - Empty Selections",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Selections required', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"contest_id\": \"{{contest_id}}\", \"selections\": [], \"blind_token\": \"token\", \"blind_token_signature\": \"sig\", \"terminal_id\": \"esp32-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/vote/commit", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "vote", "commit"]}}
+				},
+				{
+					"name": "TC-VC04: Commit Vote - Invalid Token Signature",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400 or 404', () => pm.expect(pm.response.code).to.be.oneOf([400, 404]));", "pm.test('Error returned', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"contest_id\": \"{{contest_id}}\", \"selections\": [\"{{candidate_id}}\"], \"blind_token\": \"fake-token\", \"blind_token_signature\": \"invalid-signature\", \"terminal_id\": \"esp32-terminal-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/vote/commit", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "vote", "commit"]}}
+				},
+				{
+					"name": "TC-VC05: Commit Vote - Non-Existent Contest",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));", "pm.test('Contest not found', () => pm.expect(pm.response.json().error).to.include('not found'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"contest_id\": \"00000000-0000-0000-0000-000000000000\", \"selections\": [\"00000000-0000-0000-0000-000000000001\"], \"blind_token\": \"some-token\", \"blind_token_signature\": \"some-sig\", \"terminal_id\": \"esp32-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/vote/commit", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "vote", "commit"]}}
+				}
+			]
+		},
+		{
+			"name": "16. Vote Verification",
+			"item": [
+				{
+					"name": "TC-VV01: Verify Vote - Valid TX Hash",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/vote/tx_abc123def456", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "vote", "tx_abc123def456"]}}
+				},
+				{
+					"name": "TC-VV02: Verify Vote - Non-Existent TX Hash",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));", "pm.test('Vote not found', () => pm.expect(pm.response.json().error).to.include('not found'));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/vote/nonexistent-hash", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "vote", "nonexistent-hash"]}}
+				},
+				{
+					"name": "TC-VV03: Verify Vote - Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/00000000-0000-0000-0000-000000000000/vote/some-hash", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "00000000-0000-0000-0000-000000000000", "vote", "some-hash"]}}
+				},
+				{
+					"name": "TC-VV04: Committed Votes Count",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Has vote stats', () => { const j = pm.response.json(); pm.expect(j.total_committed_votes).to.not.be.undefined; pm.expect(j.election_id).to.eql(pm.collectionVariables.get('election_id')); pm.expect(j.contests).to.not.be.undefined; });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/{{election_id}}/committed-votes", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "{{election_id}}", "committed-votes"]}}
+				},
+				{
+					"name": "TC-VV05: Committed Votes - Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/public/elections/00000000-0000-0000-0000-000000000000/committed-votes", "host": ["{{base_url}}"], "path": ["api", "v1", "public", "elections", "00000000-0000-0000-0000-000000000000", "committed-votes"]}}
+				}
+			]
+		},
+		{
+			"name": "17. Health Check - Token & Vote Engine",
+			"item": [
+				{
+					"name": "TC-H06: Health Check - Token Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Service healthy', () => { const j = pm.response.json(); pm.expect(j.status).to.eql('ok'); pm.expect(j.service).to.eql('votiix-token'); });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/token", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "token"]}}
+				},
+				{
+					"name": "TC-H07: Health Check - Vote Engine Service",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Service healthy', () => { const j = pm.response.json(); pm.expect(j.status).to.eql('ok'); pm.expect(j.service).to.eql('votiix-vote-engine'); });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/health/vote-engine", "host": ["{{base_url}}"], "path": ["api", "v1", "health", "vote-engine"]}}
+				}
+			]
+		},
+		{
+			"name": "18. Hardware Endpoints (Omar)",
+			"item": [
+				{
+					"name": "TC-HW01: Register User via Hardware",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('User registered', () => { const j = pm.response.json(); pm.expect(j.success).to.be.true; pm.expect(j.user_id).to.not.be.undefined; pm.collectionVariables.set('hw_user_id', j.user_id); });"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"full_name\": \"Test Voter\", \"national_id\": \"NID-HW-001\", \"email\": \"test@example.com\", \"phone\": \"+201234567890\", \"device_code\": \"esp32-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/register", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "register"]}}
+				},
+				{
+					"name": "TC-HW02: Register User - Missing Required Fields",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Error returned', () => pm.expect(pm.response.json().error).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"email\": \"test@example.com\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/register", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "register"]}}
+				},
+				{
+					"name": "TC-HW03: Get Next Enrollment",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Has status', () => pm.expect(pm.response.json().status).to.not.be.undefined);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/enrollment/next?device_code=esp32-01", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "enrollment", "next"], "query": [{"key": "device_code", "value": "esp32-01"}]}}
+				},
+				{
+					"name": "TC-HW04: Complete Enrollment",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Enrollment completed', () => pm.expect(pm.response.json().success).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"request_id\": 1, \"user_id\": 1, \"finger_id\": 1, \"device_code\": \"esp32-01\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/enrollment/complete", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "enrollment", "complete"]}}
+				},
+				{
+					"name": "TC-HW05: Verify Fingerprint",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"finger_id\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/verify-fingerprint", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "verify-fingerprint"]}}
+				},
+				{
+					"name": "TC-HW06: Verify Fingerprint - Missing ID",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/verify-fingerprint", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "verify-fingerprint"]}}
+				},
+				{
+					"name": "TC-HW07: Cast Vote via Hardware",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200 or 400 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 400, 404]));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"user_id\": 1, \"keypad_selection\": \"1\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/vote", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "vote"]}}
+				},
+				{
+					"name": "TC-HW08: Cast Vote - Missing Fields",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"user_id\": 1}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/vote", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "vote"]}}
+				},
+				{
+					"name": "TC-HW09: Get Candidates List",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Array returned', () => pm.expect(Array.isArray(pm.response.json())).to.be.true);"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/candidates", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "candidates"]}}
+				},
+				{
+					"name": "TC-HW10: Keypad Input",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"key\": \"5\"}"}, "url": {"raw": "{{base_url}}/api/v1/kiosk/hardware/keypad", "host": ["{{base_url}}"], "path": ["api", "v1", "kiosk", "hardware", "keypad"]}}
+				}
+			]
+		},
+		{
+			"name": "19. Tallying",
+			"item": [
+				{
+					"name": "TC-T01: Tally - Election Not In Tallying State",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 400', () => pm.response.to.have.status(400));", "pm.test('Must be Tallying', () => pm.expect(pm.response.json().error).to.include('Tallying'));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/tally", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "tally"]}}
+				},
+				{
+					"name": "TC-T02: Tally - Non-Existent Election",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"], "type": "text/javascript"}}],
+					"request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{}"}, "url": {"raw": "{{base_url}}/api/v1/admin/elections/00000000-0000-0000-0000-000000000000/tally", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "00000000-0000-0000-0000-000000000000", "tally"]}}
+				},
+				{
+					"name": "TC-T03: Admin Committed Votes",
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Has stats', () => { const j = pm.response.json(); pm.expect(j.total_committed_votes).to.not.be.undefined; pm.expect(j.as_of).to.not.be.undefined; });"], "type": "text/javascript"}}],
+					"request": {"method": "GET", "url": {"raw": "{{base_url}}/api/v1/admin/elections/{{election_id}}/committed-votes", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "elections", "{{election_id}}", "committed-votes"]}}
+				}
+			]
+		}
+	]
+}

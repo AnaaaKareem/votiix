@@ -1,0 +1,60 @@
+syntax = "proto3";
+package votiix.internal;
+
+// Called by votiix-vote-engine → votiix-identity
+service IdentityVerifier {
+  rpc VerifyBiometric (BiometricRequest) returns (BiometricResponse);
+  rpc HasVoted (HasVotedRequest) returns (HasVotedResponse);
+}
+
+message BiometricRequest {
+  string mosip_uin = 1;
+  string fingerprint_hash = 2;
+  string election_id = 3;
+}
+
+message BiometricResponse {
+  bool is_valid = 1;
+  bool is_alive = 2;
+  bool has_voted = 3;
+}
+
+message HasVotedRequest {
+  string mosip_uin = 1;
+  string election_id = 2;
+}
+
+message HasVotedResponse {
+  bool has_voted = 1;
+  string voted_at = 2;
+}
+
+// Called by votiix-vote-engine → votiix-iot
+service FleetManager {
+  rpc IsTerminalLive (TerminalRequest) returns (TerminalResponse);
+}
+
+message TerminalRequest {
+  string hardware_id = 1;
+}
+
+message TerminalResponse {
+  bool is_live = 1;
+  string status = 2;
+  string last_heartbeat = 3;
+}
+
+// Called by votiix-token → votiix-identity
+service TokenBridge {
+  rpc CheckAndMarkVoted (MarkVotedRequest) returns (MarkVotedResponse);
+}
+
+message MarkVotedRequest {
+  string mosip_uin = 1;
+  string election_id = 2;
+}
+
+message MarkVotedResponse {
+  bool was_already_voted = 1;
+  bool marked_successfully = 2;
+}

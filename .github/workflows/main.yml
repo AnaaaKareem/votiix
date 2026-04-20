@@ -1,0 +1,70 @@
+name: Votiix Production Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-push:
+    name: Build & Push to Private Registry
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      matrix:
+        component: [
+          "backend/apps/votiix-core",
+          "backend/apps/votiix-identity",
+          "backend/apps/votiix-vote-engine",
+          "backend/apps/votiix-token",
+          "backend/apps/votiix-iot",
+          "frontend/voters_interface",
+          "frontend/live"
+        ]
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.PRIVATE_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./${{ matrix.component }}/Dockerfile
+          push: true
+          tags: |
+            ${{ vars.PRIVATE_REGISTRY }}/votiix-${{ strategy.job-index }}:latest
+            ${{ vars.PRIVATE_REGISTRY }}/votiix-${{ strategy.job-index }}:${{ github.sha }}
+
+  deploy:
+    name: Deploy to Self-Hosted Server
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Executing Remote Deployment via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ vars.PRODUCTION_SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH }}
+            
+            # Login to registry on the production server
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ vars.PRIVATE_REGISTRY }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+            
+            # Pull and restart
+            docker compose pull
+            docker compose up -d --remove-orphans
+            
+            # Cleanup
+            docker image prune -f

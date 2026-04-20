@@ -1,0 +1,483 @@
+{
+  "$schema": "https://www.krakend.io/schema/v2.5/krakend.json",
+  "version": 3,
+  "name": "Votiix API Gateway",
+  "port": 8080,
+  "timeout": "10s",
+  "cache_ttl": "0s",
+  "extra_config": {
+    "security/cors": {
+      "allow_origins": ["*"],
+      "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "allow_headers": ["Content-Type", "Authorization"],
+      "expose_headers": ["Content-Length"],
+      "max_age": "12h"
+    }
+  },
+  "endpoints": [
+    {
+      "@comment": "=== HARDWARE EDGE (ESP32 Traffic) ===",
+      "endpoint": "/api/v1/kiosk/identity/auth",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/identity/auth-session",
+        "host": ["http://votiix-identity:3000"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/token/sign",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/token/sign",
+        "host": ["http://votiix-token:3001"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/token/public-key",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/token/public-key",
+        "host": ["http://votiix-token:3001"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/vote/commit",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/kiosk/vote/commit",
+        "host": ["http://votiix-vote-engine:3002"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/iot/heartbeat",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/iot/heartbeat",
+        "host": ["http://votiix-iot:3004"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/messenger/whatsapp",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/messenger/whatsapp",
+        "host": ["http://votiix-messenger:3006"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - TERMINALS ===",
+      "endpoint": "/api/v1/admin/terminals",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/iot/terminals",
+        "host": ["http://votiix-iot:3004"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - AUDIT ===",
+      "endpoint": "/api/v1/admin/audit/logs",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/audit/logs",
+        "host": ["http://votiix-observer:3005"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/audit/verify",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/audit/verify",
+        "host": ["http://votiix-observer:3005"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - ELECTIONS ===",
+      "endpoint": "/api/v1/admin/elections",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections/{id}/transition",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/transition",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections/{id}/purge",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/purge",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections/{id}/tally",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/tally",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - CONTESTS ===",
+      "endpoint": "/api/v1/admin/elections/{id}/contests",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/contests",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections/{id}/contests",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/contests",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/contests/{id}/candidates",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/contests/{id}/candidates",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/contests/{id}/candidates",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/contests/{id}/candidates",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - PARTIES ===",
+      "endpoint": "/api/v1/admin/parties",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/parties",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/parties",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/parties",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - POLLING STATIONS ===",
+      "endpoint": "/api/v1/admin/stations",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/stations",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/stations",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/stations",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== ADMIN DASHBOARD - VOTER REGISTRY ===",
+      "endpoint": "/api/v1/admin/elections/{id}/voters",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/voters",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/admin/elections/{id}/voters",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/voters",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== PUBLIC LIVE DASHBOARD ===",
+      "endpoint": "/api/v1/public/elections/{id}/results",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/results",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/public/elections/active",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/active",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "@comment": "Live committed vote count — used by dashboard ticker/stats bar",
+      "endpoint": "/api/v1/public/elections/{id}/committed-votes",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/committed-votes",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "@comment": "Vote verification — voter checks their WhatsApp receipt tx_hash",
+      "endpoint": "/api/v1/public/elections/{id}/vote/{tx_hash}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/vote/{tx_hash}",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "@comment": "Admin live count — same data accessible to admin dashboard",
+      "endpoint": "/api/v1/admin/elections/{id}/committed-votes",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/elections/{id}/committed-votes",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== HARDWARE ENDPOINTS (Omar's ESP32 Backend) ===",
+      "endpoint": "/api/v1/kiosk/hardware/register",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/api/register",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/hardware/enrollment/next",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/enrollment/next",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/hardware/enrollment/complete",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/enrollment/complete",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/hardware/verify-fingerprint",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/verify-fingerprint",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/hardware/vote",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/api/vote",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/hardware/candidates",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/api/candidates",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/kiosk/hardware/keypad",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/api/keypad",
+        "host": ["http://votiix-hardware:3007"],
+        "encoding": "no-op"
+      }]
+    },
+
+    {
+      "@comment": "=== HEALTH CHECKS ===",
+      "endpoint": "/api/v1/health/identity",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-identity:3000"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/health/token",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-token:3001"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/health/vote-engine",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-vote-engine:3002"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/health/core",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-core:3003"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/health/iot",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-iot:3004"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/health/observer",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-observer:3005"],
+        "encoding": "no-op"
+      }]
+    },
+    {
+      "endpoint": "/api/v1/health/messenger",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [{
+        "url_pattern": "/health",
+        "host": ["http://votiix-messenger:3006"],
+        "encoding": "no-op"
+      }]
+    }
+  ]
+}
